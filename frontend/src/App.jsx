@@ -17,7 +17,7 @@ import { useCallback, useEffect, useState } from "react";
 import MapView     from "./components/MapView";
 import QueryPanel  from "./components/QueryPanel";
 import ResultPanel from "./components/ResultPanel";
-import { fetchImagery, submitQuery, fetchLayer, exportSession } from "./api";
+import { fetchImagery, submitQuery, fetchLayer, exportSession, uploadImage } from "./api";
 
 const INITIAL_LAYER_VISIBILITY = {
   water:             false,
@@ -38,9 +38,25 @@ export default function App() {
   const [isLoading,       setIsLoading]       = useState(false);
   const [isExporting,     setIsExporting]     = useState(false);
   const [error,           setError]           = useState(null);
-  const [backendOnline,   setBackendOnline]   = useState(null); // null = checking
+  const [backendOnline,   setBackendOnline]   = useState(null);
   const [layerVisibility, setLayerVisibility] = useState(INITIAL_LAYER_VISIBILITY);
   const [layerData,       setLayerData]       = useState({});
+
+  // Upload state
+  const [uploadResult,   setUploadResult]   = useState(null);  // UploadResponse
+  const [isUploading,    setIsUploading]    = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadError,    setUploadError]    = useState(null);
+
+  // Build the overlay descriptor MapView expects whenever uploadResult changes
+  const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+  const uploadedImageOverlay = (uploadResult?.has_georef && uploadResult?.map_corners)
+    ? {
+        url:     `${BASE_URL}${uploadResult.preview_url}`,
+        corners: uploadResult.map_corners,
+        bounds:  uploadResult.geo_bounds,
+      }
+    : null;
 
   // ── Backend health check ───────────────────────────────────────────────────
   useEffect(() => {
@@ -53,12 +69,39 @@ export default function App() {
   // ── ROI change ─────────────────────────────────────────────────────────────
   const handleROIChange = useCallback((geom) => {
     setRoi(geom);
-    // Reset results when ROI changes
     setQueryResult(null);
     setExportResult(null);
     setError(null);
     setLayerData({});
     setLayerVisibility(INITIAL_LAYER_VISIBILITY);
+  }, []);
+
+  // ── Upload handlers ─────────────────────────────────────────────────────────
+  const handleUploadFile = useCallback(async (file) => {
+    setIsUploading(true);
+    setUploadProgress(0);
+    setUploadError(null);
+    setUploadResult(null);
+    setQueryResult(null);
+    setExportResult(null);
+    setError(null);
+    try {
+      const result = await uploadImage(file, setUploadProgress);
+      setUploadResult(result);
+    } catch (err) {
+      setUploadError(err.message || "Upload failed.");
+    } finally {
+      setIsUploading(false);
+    }
+  }, []);
+
+  const handleUploadClear = useCallback(() => {
+    setUploadResult(null);
+    setUploadError(null);
+    setUploadProgress(0);
+    setQueryResult(null);
+    setExportResult(null);
+    setError(null);
   }, []);
 
   // ── Layer toggle ───────────────────────────────────────────────────────────
@@ -80,18 +123,21 @@ export default function App() {
     }
   }, [layerVisibility, layerData, roi]);
 
-  // ── Main submit handler ────────────────────────────────────────────────────
+  // ── Main submit handler ───────────────────────────────────────────────────────
   const handleSubmit = useCallback(async (params) => {
-    if (!roi) return;
+    const isUploadMode = params.inputMode === "upload";
+    // Need either an ROI (ROI mode) or an uploaded image (upload mode)
+    if (!isUploadMode && !roi) return;
+    if (isUploadMode && !uploadResult) return;
     setIsLoading(true);
     setError(null);
     setQueryResult(null);
     setExportResult(null);
 
     try {
-      // Step 1: Fetch imagery (if not already done)
+      // Step 1: Fetch imagery only in ROI mode (upload mode uses already-uploaded refs)
       let imagery = imageryResult;
-      if (!imagery) {
+      if (!isUploadMode && !imagery) {
         try {
           imagery = await fetchImagery(
             roi,
@@ -101,14 +147,13 @@ export default function App() {
           );
           setImageryResult(imagery);
         } catch (imgErr) {
-          // Non-fatal: proceed with query anyway (backend will auto-fetch)
           console.warn("Imagery pre-fetch failed (will retry in query):", imgErr.message);
         }
       }
 
-      // Step 2: Run query
+      // Step 2: Run query — use uploaded session_id as roiGeojson placeholder if no ROI
       const result = await submitQuery({
-        roiGeojson:  roi,
+        roiGeojson:  roi || { type: "Point", coordinates: [0, 0] }, // backend ignores in upload mode
         query:       params.query,
         imageRefs:   params.imageRefs,
         modality:    params.modality,
@@ -148,7 +193,7 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
-  }, [roi, imageryResult]);
+  }, [roi, imageryResult, uploadResult]);
 
   // ── Export handler ─────────────────────────────────────────────────────────
   const handleExport = useCallback(async (formats) => {
@@ -201,15 +246,21 @@ export default function App() {
         </div>
       </header>
 
-      {/* ── Left sidebar ───────────────────────────────────────────────────── */}
+      {/* ── Left sidebar ─────────────────────────────────────────────── */}
       <QueryPanel
         roi={roi}
         onSubmit={handleSubmit}
         isLoading={isLoading}
         imageryResult={imageryResult}
+        onUploadFile={handleUploadFile}
+        uploadResult={uploadResult}
+        isUploading={isUploading}
+        uploadProgress={uploadProgress}
+        uploadError={uploadError}
+        onUploadClear={handleUploadClear}
       />
 
-      {/* ── Map ────────────────────────────────────────────────────────────── */}
+      {/* ── Map ───────────────────────────────────────────────────────────── */}
       <MapView
         onROIChange={handleROIChange}
         evidenceGeojson={queryResult?.evidence_geojson}
@@ -217,6 +268,7 @@ export default function App() {
         onLayerToggle={handleLayerToggle}
         layerData={layerData}
         showChangeTypes={showChangeTypes}
+        uploadedImageOverlay={uploadedImageOverlay}
       />
 
       {/* ── Right results panel ─────────────────────────────────────────────── */}

@@ -4,6 +4,7 @@ SatQuery AI — FastAPI backend entrypoint.
 Endpoints
 ─────────
   POST /api/roi/fetch-imagery   — Fetch satellite imagery for an ROI via GEE
+  POST /api/upload-image        — Upload a local satellite image (GeoTIFF/PNG/JPEG)
   POST /api/query               — Run agentic VLM analysis pipeline
   GET  /api/layers/{layer_name} — Fetch a thematic map layer
   POST /api/export              — Export session results in one or more formats
@@ -28,7 +29,7 @@ from dotenv import load_dotenv
 # Load .env before anything else
 load_dotenv(Path(__file__).parent / ".env")
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -46,8 +47,9 @@ from .schemas.responses import (
     ImageryResponse,
     LayerResponse,
     QueryResponse,
+    UploadResponse,
 )
-from .services import export_service, gee_service, map_layers_service
+from .services import export_service, gee_service, image_upload_service, map_layers_service
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -380,6 +382,84 @@ async def download_file(session_id: str, filename: str):
     except ValueError:
         raise HTTPException(status_code=403, detail="Access denied.")
     return FileResponse(path=str(file_path), filename=filename)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/upload-image
+# ---------------------------------------------------------------------------
+
+@app.post("/api/upload-image", response_model=UploadResponse, tags=["Imagery"])
+async def upload_image(
+    file: UploadFile = File(..., description="Satellite image file: GeoTIFF, PNG, JPEG"),
+):
+    """
+    Upload a local satellite image for analysis.
+
+    Supported formats: .tif, .tiff, .png, .jpg, .jpeg, .jp2
+
+    For GeoTIFF files with embedded CRS:
+      - Extracts bounding box (WGS-84) and 4-corner coordinates for Mapbox image overlay
+      - Returns has_georef=True and map_corners for the frontend to display on the map
+
+    For plain PNG/JPEG:
+      - Generates a preview thumbnail
+      - Returns has_georef=False (no map overlay, shown in the sidebar instead)
+
+    The returned image_id can be passed as an entry in image_refs when calling /api/query.
+    """
+    session_id = str(uuid.uuid4())
+
+    try:
+        file_bytes = await file.read()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to read uploaded file: {exc}")
+
+    try:
+        descriptor = image_upload_service.process_upload(
+            file_bytes=file_bytes,
+            original_filename=file.filename or "upload",
+            session_id=session_id,
+        )
+    except image_upload_service.UploadError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:
+        logger.exception("Unexpected error processing image upload.")
+        raise HTTPException(status_code=500, detail=f"Upload processing error: {exc}")
+
+    warnings: list[str] = []
+    if not descriptor["has_georef"] and file.filename and file.filename.lower().endswith((".tif", ".tiff")):
+        warnings.append(
+            "This GeoTIFF does not contain recognisable CRS/georeferencing information. "
+            "The image cannot be overlaid on the map, but can still be used for analysis."
+        )
+    elif not descriptor["has_georef"]:
+        warnings.append(
+            "No georeferencing found — image will be shown as a preview only, not on the map. "
+            "Upload a GeoTIFF with embedded CRS to enable map overlay."
+        )
+
+    # Save session manifest so the image ref is queryable
+    _save_session_manifest(session_id, {
+        "source": "upload",
+        "original_filename": file.filename,
+        "image_id": descriptor["image_id"],
+        "local_path": descriptor["local_path"],
+        "has_georef": descriptor["has_georef"],
+        "geo_bounds": descriptor["geo_bounds"],
+    })
+
+    return UploadResponse(
+        image_id=descriptor["image_id"],
+        session_id=session_id,
+        filename=descriptor["filename"],
+        modality=descriptor["modality"],
+        preview_url=descriptor["preview_url"],
+        local_path=descriptor["local_path"],
+        has_georef=descriptor["has_georef"],
+        geo_bounds=descriptor["geo_bounds"],
+        map_corners=descriptor["map_corners"],
+        warnings=warnings,
+    )
 
 
 # ---------------------------------------------------------------------------

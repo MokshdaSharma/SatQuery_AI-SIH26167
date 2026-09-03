@@ -124,6 +124,31 @@ export async function exportSession(sessionId, formats) {
   }
 }
 
+// ─── POST /api/upload-image ───────────────────────────────────────────────────
+/**
+ * Upload a local satellite image for analysis.
+ *
+ * @param {File} file           Browser File object (GeoTIFF, PNG, JPEG)
+ * @param {function} onProgress Optional progress callback (0–100)
+ * @returns {Promise<import('./types').UploadResponse>}
+ */
+export async function uploadImage(file, onProgress) {
+  const formData = new FormData();
+  formData.append("file", file);
+  try {
+    const { data } = await client.post("/api/upload-image", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 180_000,   // large GeoTIFF can take time
+      onUploadProgress: onProgress
+        ? (e) => onProgress(Math.round((e.loaded * 100) / (e.total || 1)))
+        : undefined,
+    });
+    return data;
+  } catch (err) {
+    throw normaliseError(err);
+  }
+}
+
 // ─── Download helper ──────────────────────────────────────────────────────────
 /**
  * Trigger a browser file download for an exported file.

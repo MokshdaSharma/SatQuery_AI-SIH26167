@@ -2,14 +2,15 @@
  * MapView.jsx — Mapbox GL JS satellite map with ROI drawing and layer overlays.
  *
  * Props:
- *   onROIChange(geojson)     — called when user draws/updates an ROI polygon
- *   evidenceGeojson          — GeoJSON FeatureCollection to overlay as evidence
- *   layerVisibility          — { water, roads, buildings, vegetation,
- *                               new_construction, demolition,
- *                               vegetation_growth, deforestation }
- *   onLayerToggle(name)      — called when a layer toggle is clicked
- *   layerData                — { [layerName]: LayerResponse }
- *   showChangeTypes          — boolean: show change-type toggles
+ *   onROIChange(geojson)       — called when user draws/updates an ROI polygon
+ *   evidenceGeojson            — GeoJSON FeatureCollection to overlay as evidence
+ *   layerVisibility            — { water, roads, buildings, vegetation,
+ *                                 new_construction, demolition,
+ *                                 vegetation_growth, deforestation }
+ *   onLayerToggle(name)        — called when a layer toggle is clicked
+ *   layerData                  — { [layerName]: LayerResponse }
+ *   showChangeTypes            — boolean: show change-type toggles
+ *   uploadedImageOverlay       — { url, corners, bounds } | null — georef image to pin on map
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -17,6 +18,11 @@ import mapboxgl from "mapbox-gl";
 import MapboxDraw from "@mapbox/mapbox-gl-draw";
 import "mapbox-gl/dist/mapbox-gl.css";
 import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css";
+
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+
+const UPLOADED_IMG_SRC = "satquery-uploaded-image";
+const UPLOADED_IMG_LAYER = "satquery-uploaded-image-layer";
 
 // Source IDs used for overlays
 const SRC = {
@@ -108,12 +114,14 @@ export default function MapView({
   onLayerToggle,
   layerData,
   showChangeTypes,
+  uploadedImageOverlay,   // { url, corners, bounds } | null
 }) {
   const mapContainerRef = useRef(null);
   const mapRef          = useRef(null);
   const drawRef         = useRef(null);
   const [mapReady, setMapReady] = useState(false);
   const [tokenMissing, setTokenMissing] = useState(false);
+  const [hasUploadOverlay, setHasUploadOverlay] = useState(false);
 
   // ── Initialise map ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -193,7 +201,53 @@ export default function MapView({
     };
   }, []);
 
-  // ── Evidence overlay ────────────────────────────────────────────────────────
+  // ── Uploaded image overlay ──────────────────────────────────────────
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+    const map = mapRef.current;
+
+    // Remove previous overlay
+    if (map.getLayer(UPLOADED_IMG_LAYER)) map.removeLayer(UPLOADED_IMG_LAYER);
+    if (map.getSource(UPLOADED_IMG_SRC))  map.removeSource(UPLOADED_IMG_SRC);
+    setHasUploadOverlay(false);
+
+    if (!uploadedImageOverlay?.url || !uploadedImageOverlay?.corners) return;
+
+    const { url, corners, bounds } = uploadedImageOverlay;
+    // corners: [[NW lon,lat],[NE],[SE],[SW]]
+    // Mapbox image source expects: [tl, tr, br, bl] as [lon, lat]
+    try {
+      map.addSource(UPLOADED_IMG_SRC, {
+        type: "image",
+        url,
+        coordinates: [
+          corners[0],  // NW (top-left)
+          corners[1],  // NE (top-right)
+          corners[2],  // SE (bottom-right)
+          corners[3],  // SW (bottom-left)
+        ],
+      });
+      map.addLayer({
+        id:   UPLOADED_IMG_LAYER,
+        type: "raster",
+        source: UPLOADED_IMG_SRC,
+        paint: { "raster-opacity": 0.85 },
+      });
+      setHasUploadOverlay(true);
+
+      // Fly to image bounds whenever a georef image is loaded
+      if (bounds) {
+        map.fitBounds(
+          [[bounds[0], bounds[1]], [bounds[2], bounds[3]]],
+          { padding: 40, duration: 1200 }
+        );
+      }
+    } catch (err) {
+      console.warn("[MapView] Failed to add uploaded image overlay:", err.message);
+    }
+  }, [uploadedImageOverlay, mapReady]);
+
+  // ── Evidence overlay ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
     const map = mapRef.current;
@@ -334,9 +388,14 @@ export default function MapView({
       {!mapReady && (
         <div className="map-hint">Initialising map…</div>
       )}
-      {mapReady && (
+      {mapReady && !hasUploadOverlay && (
         <div className="map-hint">
-          Use the polygon tool (top-right) to draw your region of interest
+          Use the polygon tool ▶ to draw an ROI, or upload a satellite image from the sidebar
+        </div>
+      )}
+      {mapReady && hasUploadOverlay && (
+        <div className="map-hint" style={{ color:"var(--color-brand-accent)" }}>
+          ✔ Uploaded image pinned on map — draw an ROI or ask a question
         </div>
       )}
     </div>

@@ -73,3 +73,20 @@ class ExportFile(BaseModel):
 class ExportResponse(BaseModel):
     session_id: str
     files: List[ExportFile]
+
+
+# ---------------------------------------------------------------------------
+# POST /api/upload-image
+# ---------------------------------------------------------------------------
+
+class UploadResponse(BaseModel):
+    image_id: str
+    session_id: str
+    filename: str
+    modality: str                           # "uploaded_optical" | "uploaded_sar" | "uploaded"
+    preview_url: Optional[str] = None       # /api/download/{session_id}/preview_{image_id}.png
+    local_path: Optional[str] = None
+    has_georef: bool = False
+    geo_bounds: Optional[List[float]] = None    # [west, south, east, north] WGS-84
+    map_corners: Optional[List[List[float]]] = None  # [[NW],[NE],[SE],[SW]] lon/lat for Mapbox
+    warnings: List[str] = Field(default_factory=list)

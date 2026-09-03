@@ -2,13 +2,20 @@
  * QueryPanel.jsx — Left sidebar for query input, date selection, and modality toggle.
  *
  * Props:
- *   roi               — GeoJSON geometry (null if not drawn yet)
- *   onSubmit(params)  — called on form submit with query params
- *   isLoading         — show loading state on submit button
- *   imageryResult     — result of fetch-imagery call (or null)
+ *   roi                   — GeoJSON geometry (null if not drawn yet)
+ *   onSubmit(params)      — called on form submit with query params
+ *   isLoading             — show loading state on submit button
+ *   imageryResult         — result of fetch-imagery call (or null)
+ *   onUploadFile(file)    — called when user selects a file to upload
+ *   uploadResult          — UploadResponse from /api/upload-image (or null)
+ *   isUploading           — upload in progress
+ *   uploadProgress        — 0-100
+ *   uploadError           — error string | null
+ *   onUploadClear()       — called when user clears the upload
  */
 
 import { useState } from "react";
+import ImageUploadPanel from "./ImageUploadPanel";
 
 const MODALITIES = [
   { value: "optical", label: "Optical" },
@@ -25,7 +32,18 @@ const QUERY_EXAMPLES = [
   "What is the dominant vegetation type here?",
 ];
 
-export default function QueryPanel({ roi, onSubmit, isLoading, imageryResult }) {
+export default function QueryPanel({
+  roi,
+  onSubmit,
+  isLoading,
+  imageryResult,
+  onUploadFile,
+  uploadResult,
+  isUploading,
+  uploadProgress,
+  uploadError,
+  onUploadClear,
+}) {
   const [query, setQuery]         = useState("");
   const [modality, setModality]   = useState("optical");
   const [dateStart, setDateStart] = useState("2024-01-01");
@@ -34,8 +52,11 @@ export default function QueryPanel({ roi, onSubmit, isLoading, imageryResult }) 
   const [dateEnd2, setDateEnd2]   = useState("");
   const [showSecondDate, setShowSecondDate] = useState(false);
   const [exampleOpen, setExampleOpen] = useState(false);
+  const [inputMode, setInputMode] = useState("roi"); // "roi" | "upload"
 
-  const canSubmit = roi && query.trim().length >= 3 && !isLoading;
+  // Can submit if query is long enough AND (roi is drawn OR an image was uploaded)
+  const hasInput = inputMode === "roi" ? !!roi : !!uploadResult;
+  const canSubmit = hasInput && query.trim().length >= 3 && !isLoading;
 
   function handleSubmit(e) {
     e.preventDefault();
@@ -47,7 +68,9 @@ export default function QueryPanel({ roi, onSubmit, isLoading, imageryResult }) 
       dateEnd: dateEnd || undefined,
       dateStart2: dateStart2 || undefined,
       dateEnd2: dateEnd2 || undefined,
-      imageRefs: imageryResult?.images?.map((img) => img.image_id) || [],
+      // Provide uploaded image_refs if in upload mode
+      imageRefs: uploadResult ? [uploadResult.image_id] : (imageryResult?.images?.map((img) => img.image_id) || []),
+      inputMode,
     });
   }
 
@@ -71,31 +94,71 @@ export default function QueryPanel({ roi, onSubmit, isLoading, imageryResult }) 
           <span style={{ fontWeight:600, fontSize:14 }}>Analysis Setup</span>
         </div>
         <p style={{ fontSize:12, color:"var(--color-text-muted)", lineHeight:1.6 }}>
-          Draw an ROI on the map, then configure and submit your query.
+          Draw an ROI on the map or upload a satellite image, then ask your question.
         </p>
       </div>
 
-      {/* ── ROI Status ──────────────────────────────────────────────────────── */}
+      {/* ── Input mode toggle ─────────────────────────────────────────────── */}
       <div className="panel-section">
-        <div className="section-title">Region of Interest</div>
-        <div className={`card ${roi ? "animate-in" : ""}`}
-          style={{ borderColor: roi ? "rgba(52,211,153,0.3)" : "var(--color-border)", padding:"10px 14px" }}>
-          {roi ? (
-            <div style={{ display:"flex", alignItems:"center", gap:8, color:"var(--color-brand-accent)" }}>
-              <span>✓</span>
-              <span style={{ fontSize:12, fontWeight:500 }}>ROI drawn</span>
-              <span style={{ fontSize:11, color:"var(--color-text-muted)", marginLeft:"auto" }}>
-                {roi.type}
-              </span>
-            </div>
-          ) : (
-            <div style={{ display:"flex", alignItems:"center", gap:8, color:"var(--color-text-muted)" }}>
-              <span style={{ fontSize:16 }}>📐</span>
-              <span style={{ fontSize:12 }}>Use the polygon tool on the map</span>
-            </div>
-          )}
+        <div className="section-title">Input Source</div>
+        <div className="modality-toggle">
+          <button
+            type="button"
+            id="input-mode-roi"
+            className={`modality-option${inputMode === "roi" ? " active" : ""}`}
+            onClick={() => setInputMode("roi")}
+          >
+            🗺 Draw ROI
+          </button>
+          <button
+            type="button"
+            id="input-mode-upload"
+            className={`modality-option${inputMode === "upload" ? " active" : ""}`}
+            onClick={() => setInputMode("upload")}
+          >
+            📤 Upload Image
+          </button>
         </div>
       </div>
+
+      {/* ── ROI mode: show ROI status ──────────────────────────────────────── */}
+      {inputMode === "roi" && (
+        <div className="panel-section">
+          <div className="section-title">Region of Interest</div>
+          <div className={`card ${roi ? "animate-in" : ""}`}
+            style={{ borderColor: roi ? "rgba(52,211,153,0.3)" : "var(--color-border)", padding:"10px 14px" }}>
+            {roi ? (
+              <div style={{ display:"flex", alignItems:"center", gap:8, color:"var(--color-brand-accent)" }}>
+                <span>✓</span>
+                <span style={{ fontSize:12, fontWeight:500 }}>ROI drawn</span>
+                <span style={{ fontSize:11, color:"var(--color-text-muted)", marginLeft:"auto" }}>
+                  {roi.type}
+                </span>
+              </div>
+            ) : (
+              <div style={{ display:"flex", alignItems:"center", gap:8, color:"var(--color-text-muted)" }}>
+                <span style={{ fontSize:16 }}>📐</span>
+                <span style={{ fontSize:12 }}>Use the polygon tool on the map</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Upload mode: show upload panel ───────────────────────────────── */}
+      {inputMode === "upload" && (
+        <div className="panel-section">
+          <div className="section-title">Upload Satellite Image</div>
+          <ImageUploadPanel
+            onUploadComplete={onUploadFile}
+            uploadResult={uploadResult}
+            isUploading={isUploading}
+            uploadProgress={uploadProgress}
+            uploadError={uploadError}
+            onClear={onUploadClear}
+          />
+        </div>
+      )}
 
       {/* ── Modality ────────────────────────────────────────────────────────── */}
       <div className="panel-section">
@@ -233,10 +296,14 @@ export default function QueryPanel({ roi, onSubmit, isLoading, imageryResult }) 
             />
           </div>
 
-          {!roi && (
+          {!hasInput && (
             <div className="warning-banner" style={{ marginBottom:12 }}>
               <span>⚠️</span>
-              <span>Draw a region of interest on the map first.</span>
+              <span>
+                {inputMode === "roi"
+                  ? "Draw a region of interest on the map first."
+                  : "Upload a satellite image first."}
+              </span>
             </div>
           )}
 
