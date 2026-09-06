@@ -201,44 +201,81 @@ export default function QueryPanel({
             onChange={(e) => setDateEnd(e.target.value)}
           />
         </div>
-
-        {/* Change analysis second epoch */}
-        <div style={{ marginTop:4 }}>
-          <button
-            type="button"
-            className="collapsible__trigger"
-            id="toggle-second-date"
-            onClick={() => setShowSecondDate((v) => !v)}
-          >
-            <span className={`collapsible__chevron${showSecondDate ? " open" : ""}`}>▶</span>
-            Change analysis — second epoch
-          </button>
-          {showSecondDate && (
-            <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:12 }}>
-              <div className="form-group" style={{ marginBottom:0 }}>
-                <label className="form-label" htmlFor="date-start-2">Second start date</label>
-                <input
-                  id="date-start-2"
-                  className="form-input"
-                  type="date"
-                  value={dateStart2}
-                  onChange={(e) => setDateStart2(e.target.value)}
-                />
-              </div>
-              <div className="form-group" style={{ marginBottom:0 }}>
-                <label className="form-label" htmlFor="date-end-2">Second end date (optional)</label>
-                <input
-                  id="date-end-2"
-                  className="form-input"
-                  type="date"
-                  value={dateEnd2}
-                  onChange={(e) => setDateEnd2(e.target.value)}
-                />
-              </div>
-            </div>
-          )}
-        </div>
       </div>
+
+      {/* ── Change Detection ─────────────────────────────────────────────────── */}
+      <div className="panel-section">
+        <div className="section-title" style={{ display:"flex", alignItems:"center", gap:6 }}>
+          <span>🔄</span> Change Detection
+        </div>
+        <p style={{ fontSize:11, color:"var(--color-text-muted)", lineHeight:1.5, marginBottom:10 }}>
+          Compare two time periods. Add a second date range to enable bi-temporal analysis
+          (new construction, demolition, vegetation change).
+        </p>
+
+        {/* Toggle */}
+        <label
+          htmlFor="toggle-second-date"
+          style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", marginBottom:10 }}
+        >
+          <div
+            id="toggle-second-date"
+            role="checkbox"
+            aria-checked={showSecondDate}
+            tabIndex={0}
+            onClick={() => setShowSecondDate((v) => !v)}
+            onKeyDown={(e) => e.key === "Enter" && setShowSecondDate((v) => !v)}
+            style={{
+              width:34, height:18, borderRadius:9,
+              background: showSecondDate ? "var(--color-brand-primary)" : "var(--color-border)",
+              transition: "background 0.2s",
+              position:"relative", flexShrink:0, cursor:"pointer",
+            }}
+          >
+            <div style={{
+              position:"absolute", top:2, left: showSecondDate ? 18 : 2,
+              width:14, height:14, borderRadius:"50%", background:"#fff",
+              transition: "left 0.2s",
+              boxShadow:"0 1px 3px rgba(0,0,0,0.3)",
+            }} />
+          </div>
+          <span style={{ fontSize:12, fontWeight:500 }}>
+            {showSecondDate ? "Second epoch enabled" : "Enable change detection"}
+          </span>
+        </label>
+
+        {showSecondDate && (
+          <div style={{ display:"flex", flexDirection:"column", gap:10, paddingLeft:4, borderLeft:"2px solid var(--color-brand-primary)" }}>
+            <div className="task-badge grounding" style={{ fontSize:10, display:"inline-flex", marginBottom:2 }}>
+              📅 Second time period
+            </div>
+            <div className="form-group" style={{ marginBottom:0 }}>
+              <label className="form-label" htmlFor="date-start-2">Start date</label>
+              <input
+                id="date-start-2"
+                className="form-input"
+                type="date"
+                value={dateStart2}
+                onChange={(e) => setDateStart2(e.target.value)}
+              />
+            </div>
+            <div className="form-group" style={{ marginBottom:0 }}>
+              <label className="form-label" htmlFor="date-end-2">End date (optional)</label>
+              <input
+                id="date-end-2"
+                className="form-input"
+                type="date"
+                value={dateEnd2}
+                onChange={(e) => setDateEnd2(e.target.value)}
+              />
+            </div>
+            <p style={{ fontSize:10, color:"var(--color-brand-primary)", marginTop:2 }}>
+              ✓ Ask questions like "What changed between these dates?" or "Detect new construction."
+            </p>
+          </div>
+        )}
+      </div>
+
 
       {/* ── Query ───────────────────────────────────────────────────────────── */}
       <div className="panel-section" style={{ flex:1 }}>

@@ -3,19 +3,20 @@ Map Layers Service — fetches thematic overlay layers for display on the map.
 
 Layers supported
 ────────────────
-  water       — JRC Global Surface Water occurrence (GEE raster → tile URL)
-  vegetation  — ESA WorldCover v200 vegetation classes (GEE raster → tile URL)
-  buildings   — Google Open Buildings v3 polygons (GEE → GeoJSON)
-  roads       — OpenStreetMap highway ways via Overpass API (→ GeoJSON)
+  water       — OSM water bodies (natural=water, waterway=riverbank, etc.)
+                via Overpass API → GeoJSON filled polygons. No GEE needed.
+  vegetation  — OSM vegetation areas (natural=wood, landuse=forest, leisure=park, etc.)
+                via Overpass API → GeoJSON filled polygons. No GEE needed.
+  buildings   — Google Open Buildings v3 (GEE) with OSM Overpass fallback.
+  roads       — OpenStreetMap highway ways via Overpass API → GeoJSON LineStrings.
 
-Returns GeoJSON for vector layers and a Mapbox-compatible tile URL for rasters.
-All GEE calls fall back to MOCK data when credentials are not configured.
+All layers use Overpass as the primary source (zero credentials needed).
+GEE is attempted for buildings only, with automatic OSM fallback on any error.
 """
 from __future__ import annotations
 
 import logging
-import os
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import requests as http_requests
 
@@ -27,9 +28,10 @@ try:
 except ImportError:
     _GEE_AVAILABLE = False
 
-from .gee_service import _init_gee, GEEError, _parse_roi
+from .gee_service import _init_gee, _parse_roi
 
-_OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+_OVERPASS_URL    = "https://overpass-api.de/api/interpreter"
+_OVERPASS_TIMEOUT = 30
 
 
 # ---------------------------------------------------------------------------
@@ -44,194 +46,244 @@ def fetch_layer(
     Fetch a thematic layer for the given ROI.
 
     Args:
-        layer_name: "water" | "vegetation" | "buildings" | "roads"
+        layer_name:  "water" | "vegetation" | "buildings" | "roads"
         roi_geojson: GeoJSON Polygon/Feature describing the clipping ROI.
 
     Returns:
-        { "layer_name": ..., "geojson": ... | None, "tile_url": ... | None, "legend": ... | None }
+        { layer_name, geojson, tile_url, legend }
 
     Raises:
         ValueError for unknown layer names.
-        GEEError / RuntimeError for fetch failures.
     """
     layer_name = layer_name.lower()
-
     dispatch = {
         "water":      _fetch_water,
         "vegetation": _fetch_vegetation,
         "buildings":  _fetch_buildings,
         "roads":      _fetch_roads,
     }
-
     fn = dispatch.get(layer_name)
     if fn is None:
         raise ValueError(
             f"Unknown layer '{layer_name}'. Valid layers: {list(dispatch.keys())}"
         )
-
     return fn(roi_geojson)
 
 
 # ---------------------------------------------------------------------------
-# Individual layer fetchers
+# Water — OSM water bodies via Overpass → GeoJSON polygons
 # ---------------------------------------------------------------------------
 
 def _fetch_water(roi_geojson: Dict[str, Any]) -> Dict[str, Any]:
-    """JRC Global Surface Water — occurrence band, clipped to ROI."""
-    gee_ok = _init_gee()
-    if not gee_ok or not _GEE_AVAILABLE:
-        return _mock_layer("water", "raster")
+    """Fetch water bodies from OSM Overpass as filled GeoJSON polygons."""
+    bbox = _geojson_to_bbox(roi_geojson)
+    if bbox is None:
+        return _mock_layer("water", "vector")
 
+    south, west, north, east = bbox
+    query = f"""
+[out:json][timeout:{_OVERPASS_TIMEOUT}];
+(
+  way["natural"="water"]({south},{west},{north},{east});
+  way["waterway"="riverbank"]({south},{west},{north},{east});
+  way["landuse"="reservoir"]({south},{west},{north},{east});
+  way["landuse"="basin"]({south},{west},{north},{east});
+  way["natural"="wetland"]({south},{west},{north},{east});
+  relation["natural"="water"]({south},{west},{north},{east});
+);
+out geom;
+"""
     try:
-        roi = _parse_roi(roi_geojson)
-        water = (
-            ee.Image("JRC/GSW1_4/GlobalSurfaceWater")
-            .select("occurrence")
-            .clip(roi)
+        resp = http_requests.post(
+            _OVERPASS_URL, data={"data": query}, timeout=_OVERPASS_TIMEOUT
         )
-        tile_url = water.getMapId({"min": 0, "max": 100, "palette": ["white", "00aaff"]})["tile_fetcher"].url_format
+        resp.raise_for_status()
+        geojson = _osm_to_geojson_polygons(resp.json())
+        logger.info("[MapLayers] water: %d features", len(geojson["features"]))
     except Exception as exc:
-        logger.error("[MapLayers] water layer failed: %s", exc)
-        return _mock_layer("water", "raster")
+        logger.error("[MapLayers] water Overpass failed: %s", exc)
+        return _mock_layer("water", "vector")
 
     return {
         "layer_name": "water",
-        "geojson": None,
-        "tile_url": tile_url,
+        "geojson":    geojson,
+        "tile_url":   None,
         "legend": {
-            "type": "gradient",
-            "label": "Surface water occurrence (%)",
-            "min": 0, "max": 100,
-            "colors": ["#ffffff", "#00aaff"],
+            "type":  "solid",
+            "label": "Water bodies (OSM)",
+            "color": "#38bdf8",
         },
     }
 
 
-def _fetch_vegetation(roi_geojson: Dict[str, Any]) -> Dict[str, Any]:
-    """ESA WorldCover v200 — vegetation classes, clipped to ROI."""
-    gee_ok = _init_gee()
-    if not gee_ok or not _GEE_AVAILABLE:
-        return _mock_layer("vegetation", "raster")
+# ---------------------------------------------------------------------------
+# Vegetation — OSM forest/park/heath polygons via Overpass → GeoJSON polygons
+# ---------------------------------------------------------------------------
 
+def _fetch_vegetation(roi_geojson: Dict[str, Any]) -> Dict[str, Any]:
+    """Fetch vegetation areas from OSM Overpass as filled GeoJSON polygons."""
+    bbox = _geojson_to_bbox(roi_geojson)
+    if bbox is None:
+        return _mock_layer("vegetation", "vector")
+
+    south, west, north, east = bbox
+    query = f"""
+[out:json][timeout:{_OVERPASS_TIMEOUT}];
+(
+  way["natural"="wood"]({south},{west},{north},{east});
+  way["landuse"="forest"]({south},{west},{north},{east});
+  way["natural"="scrub"]({south},{west},{north},{east});
+  way["natural"="heath"]({south},{west},{north},{east});
+  way["landuse"="meadow"]({south},{west},{north},{east});
+  way["leisure"="park"]({south},{west},{north},{east});
+  way["landuse"="grass"]({south},{west},{north},{east});
+  way["landuse"="orchard"]({south},{west},{north},{east});
+  way["landuse"="vineyard"]({south},{west},{north},{east});
+);
+out geom;
+"""
     try:
-        roi = _parse_roi(roi_geojson)
-        worldcover = (
-            ee.ImageCollection("ESA/WorldCover/v200")
-            .first()
-            .clip(roi)
+        resp = http_requests.post(
+            _OVERPASS_URL, data={"data": query}, timeout=_OVERPASS_TIMEOUT
         )
-        palette = [
-            "006400",  # 10 Tree cover
-            "ffbb22",  # 20 Shrubland
-            "ffff4c",  # 30 Grassland
-            "f096ff",  # 40 Cropland
-            "fa0000",  # 50 Built-up
-            "b4b4b4",  # 60 Bare/sparse veg
-            "f0f0f0",  # 70 Snow/ice
-            "0064c8",  # 80 Permanent water
-            "0096a0",  # 90 Herbaceous wetland
-            "00cf75",  # 95 Mangroves
-            "fae6a0",  # 100 Moss/lichen
-        ]
-        tile_url = worldcover.getMapId({"min": 10, "max": 100, "palette": palette})["tile_fetcher"].url_format
+        resp.raise_for_status()
+        geojson = _osm_to_geojson_polygons(resp.json(), tag_key="landuse")
+        logger.info("[MapLayers] vegetation: %d features", len(geojson["features"]))
     except Exception as exc:
-        logger.error("[MapLayers] vegetation layer failed: %s", exc)
-        return _mock_layer("vegetation", "raster")
+        logger.error("[MapLayers] vegetation Overpass failed: %s", exc)
+        return _mock_layer("vegetation", "vector")
 
     return {
         "layer_name": "vegetation",
-        "geojson": None,
-        "tile_url": tile_url,
+        "geojson":    geojson,
+        "tile_url":   None,
         "legend": {
-            "type": "categorical",
-            "label": "ESA WorldCover 2021",
-            "classes": [
-                {"value": 10, "label": "Tree cover", "color": "#006400"},
-                {"value": 20, "label": "Shrubland",  "color": "#ffbb22"},
-                {"value": 30, "label": "Grassland",  "color": "#ffff4c"},
-                {"value": 40, "label": "Cropland",   "color": "#f096ff"},
-                {"value": 50, "label": "Built-up",   "color": "#fa0000"},
-                {"value": 80, "label": "Water body",  "color": "#0064c8"},
-            ],
+            "type":  "solid",
+            "label": "Vegetation / green areas (OSM)",
+            "color": "#34d399",
         },
     }
 
 
+# ---------------------------------------------------------------------------
+# Buildings — GEE Open Buildings v3, with OSM Overpass fallback
+# ---------------------------------------------------------------------------
+
 def _fetch_buildings(roi_geojson: Dict[str, Any]) -> Dict[str, Any]:
-    """Google Open Buildings v3 — polygon footprints clipped to ROI."""
+    """Google Open Buildings via GEE; falls back to OSM building footprints."""
     gee_ok = _init_gee()
-    if not gee_ok or not _GEE_AVAILABLE:
+    if gee_ok and _GEE_AVAILABLE:
+        try:
+            roi = _parse_roi(roi_geojson)
+            buildings = (
+                ee.FeatureCollection("GOOGLE/Research/open-buildings/v3/polygons")
+                .filterBounds(roi)
+                .limit(2000)
+            )
+            geojson = buildings.getInfo()
+            logger.info(
+                "[MapLayers] buildings from GEE: %d features",
+                len(geojson.get("features", [])),
+            )
+            return {
+                "layer_name": "buildings",
+                "geojson":    geojson,
+                "tile_url":   None,
+                "legend":     None,
+            }
+        except Exception as exc:
+            logger.warning(
+                "[MapLayers] GEE buildings failed, falling back to OSM: %s", exc
+            )
+
+    return _fetch_buildings_osm(roi_geojson)
+
+
+def _fetch_buildings_osm(roi_geojson: Dict[str, Any]) -> Dict[str, Any]:
+    """OSM building footprints via Overpass as GeoJSON polygons."""
+    bbox = _geojson_to_bbox(roi_geojson)
+    if bbox is None:
         return _mock_layer("buildings", "vector")
 
+    south, west, north, east = bbox
+    query = f"""
+[out:json][timeout:{_OVERPASS_TIMEOUT}];
+(
+  way["building"]({south},{west},{north},{east});
+  relation["building"]({south},{west},{north},{east});
+);
+out geom;
+"""
     try:
-        roi = _parse_roi(roi_geojson)
-        buildings = (
-            ee.FeatureCollection("GOOGLE/Research/open-buildings/v3/polygons")
-            .filterBounds(roi)
-            .limit(2000)   # cap to avoid huge payloads
+        resp = http_requests.post(
+            _OVERPASS_URL, data={"data": query}, timeout=_OVERPASS_TIMEOUT
         )
-        geojson = buildings.getInfo()
+        resp.raise_for_status()
+        geojson = _osm_to_geojson_polygons(resp.json(), tag_key="building")
+        logger.info("[MapLayers] buildings from OSM: %d features", len(geojson["features"]))
+        return {
+            "layer_name": "buildings",
+            "geojson":    geojson,
+            "tile_url":   None,
+            "legend":     None,
+        }
     except Exception as exc:
-        logger.error("[MapLayers] buildings layer failed: %s", exc)
+        logger.error("[MapLayers] OSM buildings failed: %s", exc)
         return _mock_layer("buildings", "vector")
 
-    return {
-        "layer_name": "buildings",
-        "geojson": geojson,
-        "tile_url": None,
-        "legend": None,
-    }
 
+# ---------------------------------------------------------------------------
+# Roads — OSM highway ways via Overpass → GeoJSON LineStrings
+# ---------------------------------------------------------------------------
 
 def _fetch_roads(roi_geojson: Dict[str, Any]) -> Dict[str, Any]:
-    """OSM roads via Overpass API — highway ways clipped to the ROI bbox."""
+    """OSM roads via Overpass — highway ways within the ROI bbox."""
     bbox = _geojson_to_bbox(roi_geojson)
     if bbox is None:
         return _mock_layer("roads", "vector")
 
     south, west, north, east = bbox
     query = f"""
-[out:json][timeout:25];
+[out:json][timeout:{_OVERPASS_TIMEOUT}];
 (
-  way["highway"]({south},{west},{north},{east});
+  way["highway"~"motorway|trunk|primary|secondary|tertiary|residential|unclassified|service|track|path|footway|cycleway"]({south},{west},{north},{east});
 );
 out geom;
 """
     try:
         resp = http_requests.post(
-            _OVERPASS_URL,
-            data={"data": query},
-            timeout=30,
+            _OVERPASS_URL, data={"data": query}, timeout=_OVERPASS_TIMEOUT
         )
         resp.raise_for_status()
-        osm_data = resp.json()
+        geojson = _osm_to_geojson_lines(resp.json())
+        logger.info("[MapLayers] roads: %d features", len(geojson["features"]))
     except Exception as exc:
-        logger.error("[MapLayers] OSM roads fetch failed: %s", exc)
+        logger.error("[MapLayers] OSM roads failed: %s", exc)
         return _mock_layer("roads", "vector")
 
-    geojson = _osm_to_geojson(osm_data)
     return {
         "layer_name": "roads",
-        "geojson": geojson,
-        "tile_url": None,
-        "legend": None,
+        "geojson":    geojson,
+        "tile_url":   None,
+        "legend":     None,
     }
 
 
 # ---------------------------------------------------------------------------
-# Utilities
+# Geometry converters
 # ---------------------------------------------------------------------------
 
 def _geojson_to_bbox(
     roi_geojson: Dict[str, Any],
 ) -> Optional[Tuple[float, float, float, float]]:
-    """Return (south, west, north, east) from a GeoJSON geometry."""
+    """Return (south, west, north, east) from a GeoJSON Polygon/Feature."""
     try:
         if roi_geojson.get("type") == "Feature":
             coords_outer = roi_geojson["geometry"]["coordinates"][0]
-        else:
+        elif roi_geojson.get("type") == "Polygon":
             coords_outer = roi_geojson["coordinates"][0]
-
+        else:
+            return None
         lons = [c[0] for c in coords_outer]
         lats = [c[1] for c in coords_outer]
         return (min(lats), min(lons), max(lats), max(lons))
@@ -239,36 +291,91 @@ def _geojson_to_bbox(
         return None
 
 
-def _osm_to_geojson(osm_data: Dict) -> Dict[str, Any]:
-    """Convert Overpass API JSON to GeoJSON FeatureCollection."""
+def _osm_to_geojson_lines(osm_data: Dict) -> Dict[str, Any]:
+    """Convert Overpass JSON ways to GeoJSON LineString FeatureCollection."""
     features = []
     for element in osm_data.get("elements", []):
         if element.get("type") != "way":
             continue
-        geometry_coords = element.get("geometry", [])
-        if len(geometry_coords) < 2:
+        pts = element.get("geometry", [])
+        if len(pts) < 2:
             continue
-        line_coords = [[pt["lon"], pt["lat"]] for pt in geometry_coords]
-        features.append(
-            {
+        tags = element.get("tags", {})
+        features.append({
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [[pt["lon"], pt["lat"]] for pt in pts],
+            },
+            "properties": {
+                "highway": tags.get("highway", "unknown"),
+                "name":    tags.get("name", ""),
+                "osm_id":  element.get("id"),
+            },
+        })
+    return {"type": "FeatureCollection", "features": features}
+
+
+def _osm_to_geojson_polygons(
+    osm_data: Dict,
+    tag_key: str = "natural",
+) -> Dict[str, Any]:
+    """Convert Overpass JSON ways/relations to GeoJSON Polygon FeatureCollection."""
+    features = []
+    for element in osm_data.get("elements", []):
+        etype = element.get("type")
+        tags  = element.get("tags", {})
+
+        if etype == "way":
+            pts = element.get("geometry", [])
+            if len(pts) < 3:
+                continue
+            coords = [[pt["lon"], pt["lat"]] for pt in pts]
+            if coords[0] != coords[-1]:
+                coords.append(coords[0])
+            features.append({
                 "type": "Feature",
-                "geometry": {"type": "LineString", "coordinates": line_coords},
+                "geometry": {"type": "Polygon", "coordinates": [coords]},
                 "properties": {
-                    "highway": element.get("tags", {}).get("highway", "unknown"),
-                    "name": element.get("tags", {}).get("name", ""),
+                    tag_key: tags.get(
+                        tag_key, tags.get("natural", tags.get("landuse", "unknown"))
+                    ),
+                    "name":   tags.get("name", ""),
                     "osm_id": element.get("id"),
                 },
-            }
-        )
+            })
+
+        elif etype == "relation":
+            for m in element.get("members", []):
+                if m.get("role") != "outer":
+                    continue
+                pts = m.get("geometry", [])
+                if len(pts) < 3:
+                    continue
+                coords = [[pt["lon"], pt["lat"]] for pt in pts]
+                if coords[0] != coords[-1]:
+                    coords.append(coords[0])
+                features.append({
+                    "type": "Feature",
+                    "geometry": {"type": "Polygon", "coordinates": [coords]},
+                    "properties": {
+                        tag_key: tags.get(tag_key, tags.get("natural", "unknown")),
+                        "name":   tags.get("name", ""),
+                        "osm_id": element.get("id"),
+                    },
+                })
+                break  # only first outer ring per relation
+
     return {"type": "FeatureCollection", "features": features}
 
 
 def _mock_layer(layer_name: str, layer_type: str) -> Dict[str, Any]:
-    """Return a stub layer when GEE / OSM is unavailable."""
+    """Return an empty stub layer when fetch fails."""
     logger.info("[MapLayers] MOCK layer for '%s'.", layer_name)
     return {
         "layer_name": layer_name,
-        "geojson": {"type": "FeatureCollection", "features": []} if layer_type == "vector" else None,
-        "tile_url": None,
-        "legend": None,
+        "geojson":    {"type": "FeatureCollection", "features": []}
+                      if layer_type == "vector" else None,
+        "tile_url":   None,
+        "legend":     None,
     }

@@ -52,6 +52,35 @@ const LAYER_CONFIGS = {
       "line-width":   2,
     },
   },
+  // Base thematic layers
+  water: {
+    type: "fill",
+    paint: {
+      "fill-color":   "#38bdf8",
+      "fill-opacity": 0.45,
+    },
+  },
+  water_outline: {
+    type: "line",
+    paint: {
+      "line-color":   "#0ea5e9",
+      "line-width":   1,
+    },
+  },
+  vegetation: {
+    type: "fill",
+    paint: {
+      "fill-color":   "#34d399",
+      "fill-opacity": 0.4,
+    },
+  },
+  vegetation_outline: {
+    type: "line",
+    paint: {
+      "line-color":   "#10b981",
+      "line-width":   0.8,
+    },
+  },
   roads: {
     type: "line",
     paint: {
@@ -265,13 +294,18 @@ export default function MapView({
     map.addLayer({ id: "evidence_outline", source: SRC.evidence, ...LAYER_CONFIGS.evidence_outline });
   }, [evidenceGeojson, mapReady]);
 
-  // ── Thematic layer overlays ────────────────────────────────────────────────
+  // ── Thematic layer overlays (all GeoJSON vector) ───────────────────────────
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
     const map = mapRef.current;
 
-    const vectorLayers = ["roads", "buildings", "new_construction", "demolition",
-                          "vegetation_growth", "deforestation"];
+    // All layers now return GeoJSON — water and vegetation are polygon fills
+    const vectorLayers = [
+      "water", "vegetation",
+      "roads", "buildings",
+      "new_construction", "demolition",
+      "vegetation_growth", "deforestation",
+    ];
 
     vectorLayers.forEach((name) => {
       const layerId  = `layer-${name}`;
@@ -291,38 +325,24 @@ export default function MapView({
       if (!map.getSource(srcId)) {
         map.addSource(srcId, { type: "geojson", data });
         map.addLayer({ id: layerId, source: srcId, ...config });
+
+        // Add outline layer for filled polygon layers
+        const outlineConfig = LAYER_CONFIGS[`${name}_outline`];
+        if (outlineConfig) {
+          map.addLayer({ id: `${layerId}-outline`, source: srcId, ...outlineConfig });
+        }
       } else {
-        (map.getSource(srcId)).setData(data);
+        map.getSource(srcId).setData(data);
       }
 
-      map.setLayoutProperty(layerId, "visibility", visible ? "visible" : "none");
+      const vis = visible ? "visible" : "none";
+      map.setLayoutProperty(layerId, "visibility", vis);
+      if (map.getLayer(`${layerId}-outline`)) {
+        map.setLayoutProperty(`${layerId}-outline`, "visibility", vis);
+      }
     });
   }, [layerData, layerVisibility, mapReady]);
 
-  // Tile-based layer visibility (water, vegetation)
-  useEffect(() => {
-    if (!mapReady || !mapRef.current) return;
-    ["water", "vegetation"].forEach((name) => {
-      const layerId = `layer-${name}-raster`;
-      const map     = mapRef.current;
-      const tileUrl = layerData?.[name]?.tile_url;
-      const visible = layerVisibility?.[name];
-
-      if (!tileUrl) return;
-
-      if (!map.getSource(`satquery-${name}`)) {
-        map.addSource(`satquery-${name}`, { type: "raster", tiles: [tileUrl], tileSize: 256 });
-        map.addLayer({
-          id:     layerId,
-          type:   "raster",
-          source: `satquery-${name}`,
-          paint:  { "raster-opacity": 0.65 },
-        });
-      }
-
-      map.setLayoutProperty(layerId, "visibility", visible ? "visible" : "none");
-    });
-  }, [layerData, layerVisibility, mapReady]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
   if (tokenMissing) {
