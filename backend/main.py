@@ -238,6 +238,20 @@ async def run_query(req: QueryRequest):
                 modality=req.modality,
                 session_id=session_id,
             )
+            
+            if has_second_date:
+                date_end_2 = req.date_end_2 or (
+                    datetime.strptime(req.date_start_2, "%Y-%m-%d") + timedelta(days=90)
+                ).strftime("%Y-%m-%d")
+                raw_images_2 = gee_service.fetch_imagery(
+                    roi_geojson=req.roi_geojson,
+                    date_start=req.date_start_2,
+                    date_end=date_end_2,
+                    modality=req.modality,
+                    session_id=session_id,
+                )
+                raw_images.extend(raw_images_2)
+
             image_refs = [img["image_id"] for img in raw_images]
             metadata["image_refs"] = image_refs
         except gee_service.GEEError as exc:

@@ -25,11 +25,23 @@ logger = logging.getLogger(__name__)
 # ── Try to import earthengine-api ────────────────────────────────────────────
 try:
     import ee
-    import geemap
     _GEE_AVAILABLE = True
+    try:
+        import geemap
+    except ImportError:
+        geemap = None
 except ImportError:
-    logger.warning("earthengine-api / geemap not installed — GEE service in MOCK mode.")
+    logger.warning("earthengine-api not installed — GEE service in MOCK mode.")
     _GEE_AVAILABLE = False
+
+from dotenv import load_dotenv
+
+# Load environment variables from backend/.env if not already set
+_env_file = Path(__file__).resolve().parent.parent / ".env"
+if _env_file.exists():
+    load_dotenv(_env_file)
+else:
+    load_dotenv()
 
 # ── Settings ─────────────────────────────────────────────────────────────────
 _GEE_SERVICE_ACCOUNT  = os.getenv("GEE_SERVICE_ACCOUNT_EMAIL", "")
@@ -58,7 +70,15 @@ def _init_gee() -> bool:
         )
         return False
     try:
-        creds = ee.ServiceAccountCredentials(_GEE_SERVICE_ACCOUNT, _GEE_KEY_PATH)
+        # Resolve key path if relative
+        key_path = Path(_GEE_KEY_PATH)
+        if not key_path.is_absolute():
+            # Check relative to cwd first, then relative to backend/
+            if not key_path.exists():
+                candidate = Path(__file__).resolve().parent.parent / key_path.name
+                if candidate.exists():
+                    key_path = candidate
+        creds = ee.ServiceAccountCredentials(_GEE_SERVICE_ACCOUNT, str(key_path))
         ee.Initialize(creds, project=_GEE_PROJECT or None)
         _gee_initialised = True
         logger.info("Google Earth Engine initialised (project=%s).", _GEE_PROJECT)

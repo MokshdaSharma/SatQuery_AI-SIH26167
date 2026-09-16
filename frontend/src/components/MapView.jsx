@@ -136,6 +136,13 @@ const LAYER_LABELS = {
   deforestation:     "🪓 Deforestation",
 };
 
+const LAYER_SOURCE = {
+  water:      "GEE / JRC 10m",
+  roads:      "OSM",
+  buildings:  "Google Open Buildings",
+  vegetation: "GEE / ESA WorldCover",
+};
+
 export default function MapView({
   onROIChange,
   evidenceGeojson,
@@ -367,39 +374,77 @@ export default function MapView({
 
       {/* Layer toggle panel */}
       <div className="map-overlay-panel">
-        <div className="card" style={{ padding:"10px 12px" }}>
-          <div className="section-title" style={{ marginBottom:8, fontSize:10 }}>Map Layers</div>
-          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-            {baseToggles.map((name) => (
-              <button
-                key={name}
-                id={`layer-toggle-${name}`}
-                className={`toggle-btn${layerVisibility?.[name] ? " active" : ""}`}
-                onClick={() => onLayerToggle?.(name)}
-                style={{ justifyContent:"flex-start" }}
-              >
-                <span className="dot" />
-                {LAYER_LABELS[name]}
-              </button>
-            ))}
+        <div className="card" style={{ padding: "10px 12px", minWidth: 180 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: "var(--color-brand-primary)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8, display: "flex", alignItems: "center", gap: 5 }}>
+            <span>🗂</span> Map Layers
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            {baseToggles.map((name) => {
+              const isActive = layerVisibility?.[name];
+              const hasData = !!(layerData?.[name]?.geojson?.features?.length);
+              return (
+                <button
+                  key={name}
+                  id={`layer-toggle-${name}`}
+                  onClick={() => onLayerToggle?.(name)}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 7,
+                    padding: "6px 9px", borderRadius: 7, cursor: "pointer",
+                    background: isActive ? "rgba(56,189,248,0.14)" : "rgba(255,255,255,0.03)",
+                    border: isActive ? "1px solid rgba(56,189,248,0.4)" : "1px solid rgba(56,189,248,0.12)",
+                    color: isActive ? "var(--color-brand-primary)" : "var(--color-text-secondary)",
+                    transition: "all 0.2s", textAlign: "left",
+                  }}
+                >
+                  <span style={{ fontSize: 13 }}>{LAYER_LABELS[name].split(" ")[0]}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 500 }}>{LAYER_LABELS[name].split(" ").slice(1).join(" ")}</div>
+                    {LAYER_SOURCE[name] && (
+                      <div style={{ fontSize: 9.5, color: isActive ? "rgba(56,189,248,0.6)" : "var(--color-text-muted)", marginTop: 1 }}>
+                        {LAYER_SOURCE[name]}
+                      </div>
+                    )}
+                  </div>
+                  {isActive && hasData && (
+                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--color-brand-accent)", flexShrink: 0 }} />
+                  )}
+                  {isActive && !hasData && (
+                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--color-brand-warning)", flexShrink: 0, animation: "pulse 1.5s ease-in-out infinite" }} />
+                  )}
+                </button>
+              );
+            })}
 
             {showChangeTypes && (
               <>
-                <div className="section-title" style={{ marginTop:6, marginBottom:4, fontSize:9 }}>Change Types</div>
+                <div style={{ fontSize: 9, fontWeight: 700, color: "var(--color-text-muted)", letterSpacing: "0.08em", textTransform: "uppercase", marginTop: 6, marginBottom: 3 }}>Detected Changes</div>
                 {changeToggles.map((name) => (
                   <button
                     key={name}
                     id={`layer-toggle-${name}`}
-                    className={`toggle-btn${layerVisibility?.[name] ? " active" : ""}`}
                     onClick={() => onLayerToggle?.(name)}
-                    style={{ justifyContent:"flex-start" }}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 7,
+                      padding: "6px 9px", borderRadius: 7, cursor: "pointer",
+                      background: layerVisibility?.[name] ? "rgba(56,189,248,0.14)" : "rgba(255,255,255,0.03)",
+                      border: layerVisibility?.[name] ? "1px solid rgba(56,189,248,0.4)" : "1px solid rgba(56,189,248,0.12)",
+                      color: layerVisibility?.[name] ? "var(--color-brand-primary)" : "var(--color-text-secondary)",
+                      transition: "all 0.2s", textAlign: "left",
+                      fontSize: 11.5, fontWeight: 500,
+                    }}
                   >
-                    <span className="dot" />
-                    {LAYER_LABELS[name]}
+                    <span style={{ fontSize: 13 }}>{LAYER_LABELS[name].split(" ")[0]}</span>
+                    {LAYER_LABELS[name].split(" ").slice(1).join(" ")}
                   </button>
                 ))}
               </>
             )}
+          </div>
+
+          {/* Legend tip */}
+          <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(56,189,248,0.1)", fontSize: 9.5, color: "var(--color-text-muted)", lineHeight: 1.5 }}>
+            <span style={{ color: "var(--color-brand-accent)" }}>●</span> = loaded &nbsp;
+            <span style={{ color: "var(--color-brand-warning)" }}>●</span> = loading
           </div>
         </div>
       </div>
@@ -410,11 +455,11 @@ export default function MapView({
       )}
       {mapReady && !hasUploadOverlay && (
         <div className="map-hint">
-          Use the polygon tool ▶ to draw an ROI, or upload a satellite image from the sidebar
+          🖊 Use the <strong>polygon tool</strong> (top-right of map) to draw your region of interest
         </div>
       )}
       {mapReady && hasUploadOverlay && (
-        <div className="map-hint" style={{ color:"var(--color-brand-accent)" }}>
+        <div className="map-hint" style={{ color: "var(--color-brand-accent)" }}>
           ✔ Uploaded image pinned on map — draw an ROI or ask a question
         </div>
       )}

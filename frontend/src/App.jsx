@@ -218,30 +218,31 @@ export default function App() {
       <header className="app-header">
         <div className="app-header__logo">
           <div className="app-header__logo-icon">🛰</div>
-          <span className="app-header__logo-text">SatQuery AI</span>
+          <div>
+            <span className="app-header__logo-text">SatQuery AI</span>
+            <div style={{ fontSize: 9.5, color: "var(--color-text-muted)", letterSpacing: "0.05em", marginTop: -2 }}>AI-Powered Satellite Analysis</div>
+          </div>
         </div>
         <span className="app-header__badge">Beta</span>
 
         {queryResult && (
           <span style={{
-            marginLeft: 12,
-            fontSize: 12,
+            marginLeft: 12, fontSize: 11.5,
             color: "var(--color-text-secondary)",
             background: "rgba(56,189,248,0.06)",
             border: "1px solid var(--color-border)",
-            borderRadius: 20,
-            padding: "2px 10px",
+            borderRadius: 20, padding: "2px 10px",
           }}>
-            {queryResult.task_type.replace("_", " ")} · {(queryResult.confidence * 100).toFixed(0)}% conf.
+            {queryResult.task_type.replace("_", " ")} · {(queryResult.confidence * 100).toFixed(0)}% confidence
           </span>
         )}
 
         <div className="app-header__status">
           <div className={`status-dot${backendOnline === false ? " offline" : ""}`} />
-          <span>
+          <span style={{ fontSize: 11.5 }}>
             {backendOnline === null  ? "Connecting…"
-             : backendOnline        ? "Backend online"
-             :                        "Backend offline"}
+             : backendOnline        ? "AI Engine Online"
+             :                        "Engine Offline"}
           </span>
         </div>
       </header>

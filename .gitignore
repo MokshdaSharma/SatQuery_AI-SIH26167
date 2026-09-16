@@ -4,23 +4,38 @@
 
 # ─── Secrets & credentials ──────────────────────────────────────────
 # GEE service account key (NEVER commit this)
-satquery-ai-507419-bd42e79609ce.json
+backend/satquery-ai-*.json
+satquery-ai-*.json
 *.json.key
 *-credentials.json
 *-service-account.json
 
-# Environment variable files
+# Kaggle API credentials
+kaggle.json
+~/.kaggle/kaggle.json
+
+# Environment variable files (contain API keys)
 .env
 .env.local
 .env.*.local
 backend/.env
 frontend/.env
+frontend/.env.local
+frontend/.env.production
+*.env
+
+# ─── Datasets & Kaggle ─────────────────────────────────────────────
+data/
+datasets/
 
 # ─── Python virtual environment ─────────────────────────────────────
 env/
 venv/
 .venv/
 ENV/
+env.bak/
+venv.bak/
+.python-version
 
 # ─── Python cache & compiled files ──────────────────────────────────
 __pycache__/
@@ -39,10 +54,13 @@ dist/
 .eggs/
 *.whl
 MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
 
 # ─── Testing & coverage ─────────────────────────────────────────────
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
 .tox/
 .nox/
@@ -53,11 +71,14 @@ nosetests.xml
 # ─── Type checking ──────────────────────────────────────────────────
 .mypy_cache/
 .dmypy.json
+dmypy.json
 .pyright/
 
 # ─── Jupyter notebooks ──────────────────────────────────────────────
+# Keep .ipynb if you want to track Kaggle notebook scripts; unblock selectively
 .ipynb_checkpoints/
-*.ipynb
+# Uncomment below to also ignore all notebooks:
+# *.ipynb
 
 # ─── Node / frontend ────────────────────────────────────────────────
 node_modules/
@@ -67,6 +88,8 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 .pnpm-store/
+package-lock.json
+yarn.lock
 
 # Vite build output
 frontend/dist/
@@ -76,6 +99,7 @@ frontend/.vite-temp/
 # ─── Sessions & exports (runtime-generated) ─────────────────────────
 sessions/
 backend/sessions/
+exports/
 
 # ─── Model weights (large binary files — host on HuggingFace Hub) ───
 backend/models/weights/
@@ -85,11 +109,17 @@ backend/models/weights/
 *.safetensors
 *.bin
 *.gguf
+*.pkl
+*.pickle
 
 # ─── Raster / imagery outputs ───────────────────────────────────────
 *.tif
 *.tiff
 *.geotiff
+*.jp2
+*.h5
+*.hdf5
+*.nc
 
 # ─── Logs ───────────────────────────────────────────────────────────
 *.log
@@ -104,7 +134,9 @@ backend/logs/
 .Trashes
 ehthumbs.db
 Thumbs.db
+Thumbs.db:encryptable
 desktop.ini
+$RECYCLE.BIN/
 
 # ─── IDEs & editors ─────────────────────────────────────────────────
 .vscode/
@@ -116,10 +148,26 @@ desktop.ini
 *.sw?
 *.swp
 *~
+.project
+.classpath
+.settings/
 
-# ─── Temporary files ────────────────────────────────────────────────
+# ─── Temporary / scratch files ──────────────────────────────────────
 tmp/
 temp/
 *.tmp
 *.bak
 *.orig
+*.cache
+scratch/
+
+# ─── Reference / internal docs (not for public repo) ───────────────
+ref_docs/
+
+# ─── Test & debug scripts ───────────────────────────────────────────
+# Keep scripts/ in git; ignore any temp test output files
+test_output/
+*.test.json
+
+test_layers.py
+FINE_TUNING_REPORT.md

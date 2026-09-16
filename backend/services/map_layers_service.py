@@ -3,20 +3,22 @@ Map Layers Service — fetches thematic overlay layers for display on the map.
 
 Layers supported
 ────────────────
-  water       — OSM water bodies (natural=water, waterway=riverbank, etc.)
-                via Overpass API → GeoJSON filled polygons. No GEE needed.
-  vegetation  — OSM vegetation areas (natural=wood, landuse=forest, leisure=park, etc.)
-                via Overpass API → GeoJSON filled polygons. No GEE needed.
-  buildings   — Google Open Buildings v3 (GEE) with OSM Overpass fallback.
-  roads       — OpenStreetMap highway ways via Overpass API → GeoJSON LineStrings.
+  water       — GEE ESA WorldCover 10m + JRC Global Surface Water vectors,
+                with OSM Overpass fallback.
+  vegetation  — GEE ESA WorldCover 10m (Trees/Shrub/Grass) vector polygons,
+                with OSM Overpass fallback.
+  buildings   — Google Open Buildings v3 (GEE) with confidence filter (>=0.65)
+                and OSM Overpass fallback.
+  roads       — OpenStreetMap highway ways via resilient multi-endpoint Overpass
+                API → GeoJSON LineStrings.
 
-All layers use Overpass as the primary source (zero credentials needed).
-GEE is attempted for buildings only, with automatic OSM fallback on any error.
+GEE provides max-accuracy satellite-derived feature extraction (10m resolution),
+backed by multi-mirror OpenStreetMap Overpass fallback.
 """
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests as http_requests
 
@@ -30,8 +32,34 @@ except ImportError:
 
 from .gee_service import _init_gee, _parse_roi
 
-_OVERPASS_URL    = "https://overpass-api.de/api/interpreter"
-_OVERPASS_TIMEOUT = 30
+_OVERPASS_ENDPOINTS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+]
+_OVERPASS_TIMEOUT = 8
+
+
+# ---------------------------------------------------------------------------
+# Overpass Query Helper
+# ---------------------------------------------------------------------------
+
+def _query_overpass(query: str) -> Optional[Dict[str, Any]]:
+    """Query Overpass API with multi-endpoint fallback to avoid 504 timeouts."""
+    for endpoint in _OVERPASS_ENDPOINTS:
+        try:
+            resp = http_requests.post(
+                endpoint,
+                data={"data": query},
+                headers={"User-Agent": "SatQueryAI/1.0"},
+                timeout=_OVERPASS_TIMEOUT,
+            )
+            if resp.status_code == 200:
+                return resp.json()
+        except Exception as exc:
+            logger.debug("[MapLayers] Overpass query on %s failed: %s", endpoint, exc)
+            continue
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -71,10 +99,54 @@ def fetch_layer(
 
 
 # ---------------------------------------------------------------------------
-# Water — OSM water bodies via Overpass → GeoJSON polygons
+# Water — GEE (ESA WorldCover 10m + JRC Surface Water) with OSM fallback
 # ---------------------------------------------------------------------------
 
 def _fetch_water(roi_geojson: Dict[str, Any]) -> Dict[str, Any]:
+    """Fetch water bodies from GEE, falling back to OSM Overpass on error."""
+    gee_ok = _init_gee()
+    if gee_ok and _GEE_AVAILABLE:
+        try:
+            roi = _parse_roi(roi_geojson)
+            # 1. ESA WorldCover water (class 80)
+            wc = ee.ImageCollection("ESA/WorldCover/v200").first().clip(roi)
+            wc_water = wc.eq(80)
+
+            # 2. JRC Global Surface Water occurrence > 10%
+            jrc_water = ee.Image("JRC/GSW1_4/GlobalSurfaceWater").select("occurrence").clip(roi).gt(10)
+
+            # Combined water mask
+            water_mask = wc_water.Or(jrc_water).selfMask()
+
+            vectors = water_mask.reduceToVectors(
+                geometry=roi,
+                scale=20,
+                maxPixels=1e7,
+                geometryType="polygon",
+                eightConnected=False,
+                labelProperty="water",
+            ).limit(1000)
+
+            geojson = vectors.getInfo()
+            feat_count = len(geojson.get("features", []))
+            logger.info("[MapLayers] GEE water: %d features", feat_count)
+            return {
+                "layer_name": "water",
+                "geojson":    geojson,
+                "tile_url":   None,
+                "legend": {
+                    "type":  "solid",
+                    "label": "Water bodies (GEE ESA WorldCover / JRC 10m)",
+                    "color": "#38bdf8",
+                },
+            }
+        except Exception as exc:
+            logger.warning("[MapLayers] GEE water failed, falling back to OSM: %s", exc)
+
+    return _fetch_water_osm(roi_geojson)
+
+
+def _fetch_water_osm(roi_geojson: Dict[str, Any]) -> Dict[str, Any]:
     """Fetch water bodies from OSM Overpass as filled GeoJSON polygons."""
     bbox = _geojson_to_bbox(roi_geojson)
     if bbox is None:
@@ -93,34 +165,68 @@ def _fetch_water(roi_geojson: Dict[str, Any]) -> Dict[str, Any]:
 );
 out geom;
 """
-    try:
-        resp = http_requests.post(
-            _OVERPASS_URL, data={"data": query}, timeout=_OVERPASS_TIMEOUT
-        )
-        resp.raise_for_status()
-        geojson = _osm_to_geojson_polygons(resp.json())
-        logger.info("[MapLayers] water: %d features", len(geojson["features"]))
-    except Exception as exc:
-        logger.error("[MapLayers] water Overpass failed: %s", exc)
-        return _mock_layer("water", "vector")
+    osm_data = _query_overpass(query)
+    if osm_data:
+        geojson = _osm_to_geojson_polygons(osm_data)
+        logger.info("[MapLayers] water (OSM): %d features", len(geojson["features"]))
+        return {
+            "layer_name": "water",
+            "geojson":    geojson,
+            "tile_url":   None,
+            "legend": {
+                "type":  "solid",
+                "label": "Water bodies (OSM)",
+                "color": "#38bdf8",
+            },
+        }
 
-    return {
-        "layer_name": "water",
-        "geojson":    geojson,
-        "tile_url":   None,
-        "legend": {
-            "type":  "solid",
-            "label": "Water bodies (OSM)",
-            "color": "#38bdf8",
-        },
-    }
+    logger.warning("[MapLayers] water Overpass fallback failed or returned empty.")
+    return _mock_layer("water", "vector")
 
 
 # ---------------------------------------------------------------------------
-# Vegetation — OSM forest/park/heath polygons via Overpass → GeoJSON polygons
+# Vegetation — GEE (ESA WorldCover 10m Canopy) with OSM fallback
 # ---------------------------------------------------------------------------
 
 def _fetch_vegetation(roi_geojson: Dict[str, Any]) -> Dict[str, Any]:
+    """Fetch vegetation canopy from GEE, falling back to OSM Overpass on error."""
+    gee_ok = _init_gee()
+    if gee_ok and _GEE_AVAILABLE:
+        try:
+            roi = _parse_roi(roi_geojson)
+            # ESA WorldCover v200: 10=Tree cover, 20=Shrubland, 30=Grassland, 95=Mangroves
+            wc = ee.ImageCollection("ESA/WorldCover/v200").first().clip(roi)
+            veg_mask = wc.eq(10).Or(wc.eq(20)).Or(wc.eq(30)).Or(wc.eq(95)).selfMask()
+
+            vectors = veg_mask.reduceToVectors(
+                geometry=roi,
+                scale=25,
+                maxPixels=1e7,
+                geometryType="polygon",
+                eightConnected=False,
+                labelProperty="vegetation",
+            ).limit(1500)
+
+            geojson = vectors.getInfo()
+            feat_count = len(geojson.get("features", []))
+            logger.info("[MapLayers] GEE vegetation: %d features", feat_count)
+            return {
+                "layer_name": "vegetation",
+                "geojson":    geojson,
+                "tile_url":   None,
+                "legend": {
+                    "type":  "solid",
+                    "label": "Vegetation / Tree Canopy (GEE ESA WorldCover 10m)",
+                    "color": "#34d399",
+                },
+            }
+        except Exception as exc:
+            logger.warning("[MapLayers] GEE vegetation failed, falling back to OSM: %s", exc)
+
+    return _fetch_vegetation_osm(roi_geojson)
+
+
+def _fetch_vegetation_osm(roi_geojson: Dict[str, Any]) -> Dict[str, Any]:
     """Fetch vegetation areas from OSM Overpass as filled GeoJSON polygons."""
     bbox = _geojson_to_bbox(roi_geojson)
     if bbox is None:
@@ -142,31 +248,27 @@ def _fetch_vegetation(roi_geojson: Dict[str, Any]) -> Dict[str, Any]:
 );
 out geom;
 """
-    try:
-        resp = http_requests.post(
-            _OVERPASS_URL, data={"data": query}, timeout=_OVERPASS_TIMEOUT
-        )
-        resp.raise_for_status()
-        geojson = _osm_to_geojson_polygons(resp.json(), tag_key="landuse")
-        logger.info("[MapLayers] vegetation: %d features", len(geojson["features"]))
-    except Exception as exc:
-        logger.error("[MapLayers] vegetation Overpass failed: %s", exc)
-        return _mock_layer("vegetation", "vector")
+    osm_data = _query_overpass(query)
+    if osm_data:
+        geojson = _osm_to_geojson_polygons(osm_data, tag_key="landuse")
+        logger.info("[MapLayers] vegetation (OSM): %d features", len(geojson["features"]))
+        return {
+            "layer_name": "vegetation",
+            "geojson":    geojson,
+            "tile_url":   None,
+            "legend": {
+                "type":  "solid",
+                "label": "Vegetation / green areas (OSM)",
+                "color": "#34d399",
+            },
+        }
 
-    return {
-        "layer_name": "vegetation",
-        "geojson":    geojson,
-        "tile_url":   None,
-        "legend": {
-            "type":  "solid",
-            "label": "Vegetation / green areas (OSM)",
-            "color": "#34d399",
-        },
-    }
+    logger.warning("[MapLayers] vegetation Overpass fallback failed or returned empty.")
+    return _mock_layer("vegetation", "vector")
 
 
 # ---------------------------------------------------------------------------
-# Buildings — GEE Open Buildings v3, with OSM Overpass fallback
+# Buildings — GEE Open Buildings v3 (>= 0.65 conf) with OSM fallback
 # ---------------------------------------------------------------------------
 
 def _fetch_buildings(roi_geojson: Dict[str, Any]) -> Dict[str, Any]:
@@ -178,18 +280,21 @@ def _fetch_buildings(roi_geojson: Dict[str, Any]) -> Dict[str, Any]:
             buildings = (
                 ee.FeatureCollection("GOOGLE/Research/open-buildings/v3/polygons")
                 .filterBounds(roi)
+                .filter(ee.Filter.gte("confidence", 0.65))
                 .limit(2000)
             )
             geojson = buildings.getInfo()
-            logger.info(
-                "[MapLayers] buildings from GEE: %d features",
-                len(geojson.get("features", [])),
-            )
+            feat_count = len(geojson.get("features", []))
+            logger.info("[MapLayers] buildings from GEE: %d features", feat_count)
             return {
                 "layer_name": "buildings",
                 "geojson":    geojson,
                 "tile_url":   None,
-                "legend":     None,
+                "legend": {
+                    "type":  "solid",
+                    "label": "Building Footprints (Google Open Buildings v3)",
+                    "color": "#f59e0b",
+                },
             }
         except Exception as exc:
             logger.warning(
@@ -214,26 +319,27 @@ def _fetch_buildings_osm(roi_geojson: Dict[str, Any]) -> Dict[str, Any]:
 );
 out geom;
 """
-    try:
-        resp = http_requests.post(
-            _OVERPASS_URL, data={"data": query}, timeout=_OVERPASS_TIMEOUT
-        )
-        resp.raise_for_status()
-        geojson = _osm_to_geojson_polygons(resp.json(), tag_key="building")
+    osm_data = _query_overpass(query)
+    if osm_data:
+        geojson = _osm_to_geojson_polygons(osm_data, tag_key="building")
         logger.info("[MapLayers] buildings from OSM: %d features", len(geojson["features"]))
         return {
             "layer_name": "buildings",
             "geojson":    geojson,
             "tile_url":   None,
-            "legend":     None,
+            "legend": {
+                "type":  "solid",
+                "label": "Building Footprints (OSM)",
+                "color": "#f59e0b",
+            },
         }
-    except Exception as exc:
-        logger.error("[MapLayers] OSM buildings failed: %s", exc)
-        return _mock_layer("buildings", "vector")
+
+    logger.warning("[MapLayers] buildings Overpass fallback failed or returned empty.")
+    return _mock_layer("buildings", "vector")
 
 
 # ---------------------------------------------------------------------------
-# Roads — OSM highway ways via Overpass → GeoJSON LineStrings
+# Roads — Resilient OSM Overpass Query → GeoJSON LineStrings
 # ---------------------------------------------------------------------------
 
 def _fetch_roads(roi_geojson: Dict[str, Any]) -> Dict[str, Any]:
@@ -250,23 +356,23 @@ def _fetch_roads(roi_geojson: Dict[str, Any]) -> Dict[str, Any]:
 );
 out geom;
 """
-    try:
-        resp = http_requests.post(
-            _OVERPASS_URL, data={"data": query}, timeout=_OVERPASS_TIMEOUT
-        )
-        resp.raise_for_status()
-        geojson = _osm_to_geojson_lines(resp.json())
-        logger.info("[MapLayers] roads: %d features", len(geojson["features"]))
-    except Exception as exc:
-        logger.error("[MapLayers] OSM roads failed: %s", exc)
-        return _mock_layer("roads", "vector")
+    osm_data = _query_overpass(query)
+    if osm_data:
+        geojson = _osm_to_geojson_lines(osm_data)
+        logger.info("[MapLayers] roads (OSM): %d features", len(geojson["features"]))
+        return {
+            "layer_name": "roads",
+            "geojson":    geojson,
+            "tile_url":   None,
+            "legend": {
+                "type":  "solid",
+                "label": "Roads & Highways (OSM)",
+                "color": "#94a3b8",
+            },
+        }
 
-    return {
-        "layer_name": "roads",
-        "geojson":    geojson,
-        "tile_url":   None,
-        "legend":     None,
-    }
+    logger.warning("[MapLayers] roads Overpass query failed or returned empty.")
+    return _mock_layer("roads", "vector")
 
 
 # ---------------------------------------------------------------------------
