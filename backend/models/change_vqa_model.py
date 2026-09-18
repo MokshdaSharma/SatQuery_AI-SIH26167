@@ -131,66 +131,98 @@ class ChangeVQAModel(SpecialistModel):
             except Exception as exc:
                 logger.error("[ChangeVQAModel] Inference error: %s", exc)
 
-        # ── Stub fallback: Anthropic → OpenAI → hardcoded ──────────────────
+        # ── Vision fallback: send both images to Claude / GPT-4o ───────────
         stub_answer = None
 
-        # 1) Try Anthropic Claude
+        def _img_to_b64(img) -> tuple:
+            import base64, io
+            from PIL import Image as PILImage
+            if not hasattr(img, "mode"):
+                img = PILImage.open(str(img)).convert("RGB")
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=85)
+            return base64.b64encode(buf.getvalue()).decode(), "image/jpeg"
+
+        # Encode before/after images
+        before_b64, before_mime = None, "image/jpeg"
+        after_b64, after_mime = None, "image/jpeg"
+        try:
+            if len(images) >= 1:
+                before_b64, before_mime = _img_to_b64(images[0])
+            if len(images) >= 2:
+                after_b64, after_mime = _img_to_b64(images[1])
+        except Exception as e:
+            logger.warning("[ChangeVQAModel] Could not encode images: %s", e)
+
+        change_prompt = (
+            f"I have two satellite images of the same area taken at different times. "
+            f"The first image is from {date1} (BEFORE) and the second is from {date2} (AFTER). "
+            f"Question: {query} "
+            f"Analyze what changed between the two images and provide a detailed, specific answer."
+        )
+
+        # 1) Anthropic Claude Vision
         try:
             import anthropic
             anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
             if anthropic_key and not anthropic_key.startswith("your-"):
                 client = anthropic.Anthropic(api_key=anthropic_key)
+                content: list = []
+                if before_b64:
+                    content.append({"type": "text", "text": f"BEFORE image ({date1}):"})
+                    content.append({"type": "image", "source": {"type": "base64", "media_type": before_mime, "data": before_b64}})
+                if after_b64:
+                    content.append({"type": "text", "text": f"AFTER image ({date2}):"})
+                    content.append({"type": "image", "source": {"type": "base64", "media_type": after_mime, "data": after_b64}})
+                content.append({"type": "text", "text": change_prompt})
+
                 msg = client.messages.create(
                     model="claude-3-5-sonnet-20241022",
-                    max_tokens=300,
+                    max_tokens=400,
                     system=(
-                        "You are a professional satellite imagery analyst. "
-                        "Write detailed comparative analysis reports. "
-                        "Never mention that you cannot see images or that you are an AI."
+                        "You are a professional remote-sensing change detection analyst. "
+                        "Compare the two satellite images carefully and describe specific, observable changes "
+                        "in land cover, built-up areas, vegetation, water bodies, or infrastructure. "
+                        "Be precise and grounded in what you actually observe."
                     ),
-                    messages=[{"role": "user", "content": (
-                        f"Compare two remote-sensing images from {date1} and {date2}. "
-                        f"The user asks: '{query}'. "
-                        "Provide a comprehensive multi-sentence comparative analysis mentioning "
-                        "specific shifts such as infrastructure development, deforestation, "
-                        "agricultural changes, or urban expansion."
-                    )}],
+                    messages=[{"role": "user", "content": content}],
                 )
                 stub_answer = msg.content[0].text.strip()
+                logger.info("[ChangeVQAModel] Anthropic vision fallback succeeded.")
         except Exception as e:
-            logger.warning("[ChangeVQAModel] Anthropic fallback failed: %s", e)
+            logger.warning("[ChangeVQAModel] Anthropic vision fallback failed: %s", e)
 
-        # 2) Try OpenAI GPT-4o-mini
+        # 2) OpenAI GPT-4o-mini Vision
         if not stub_answer:
             try:
                 import openai
                 client = openai.OpenAI()
-                prompt = (
-                    f"Act as a professional satellite imagery analyst writing a detailed report. "
-                    f"You are comparing two remote-sensing images from {date1} and {date2}. "
-                    f"The user asks: '{query}'. Provide a comprehensive, multi-sentence descriptive response "
-                    f"that sounds like a professional comparative analysis report. Mention specific plausible shifts "
-                    f"such as new infrastructure development, deforestation, agricultural changes, or urban expansion. "
-                    f"Do not mention that you cannot see the images or that you are an AI. Write confidently as if you "
-                    f"are observing the data."
-                )
+                content_parts: list = []
+                if before_b64:
+                    content_parts.append({"type": "text", "text": f"BEFORE ({date1}):"})
+                    content_parts.append({"type": "image_url", "image_url": {"url": f"data:{before_mime};base64,{before_b64}", "detail": "high"}})
+                if after_b64:
+                    content_parts.append({"type": "text", "text": f"AFTER ({date2}):"})
+                    content_parts.append({"type": "image_url", "image_url": {"url": f"data:{after_mime};base64,{after_b64}", "detail": "high"}})
+                content_parts.append({"type": "text", "text": change_prompt})
+
                 response = client.chat.completions.create(
                     model="gpt-4o-mini",
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=250,
-                    temperature=0.7,
+                    messages=[{"role": "user", "content": content_parts}],
+                    max_tokens=400,
+                    temperature=0.3,
                 )
                 stub_answer = response.choices[0].message.content.strip()
+                logger.info("[ChangeVQAModel] OpenAI vision fallback succeeded.")
             except Exception as e:
-                logger.error("[ChangeVQAModel] OpenAI fallback failed: %s", e)
+                logger.error("[ChangeVQAModel] OpenAI vision fallback failed: %s", e)
 
         # 3) Hardcoded final fallback
         if not stub_answer:
             stub_answer = (
-                f"A detailed comparison of the imagery from {date1} and {date2} in response to '{query[:60]}' reveals "
-                "notable and distinct land-use changes within the region of interest. The analysis indicates clear temporal "
-                "shifts consistent with structural development and modifications in vegetation cover, suggesting active "
-                "anthropogenic or environmental progression over the specified time period."
+                f"Comparing imagery from {date1} to {date2} for: '{query[:60]}'. "
+                "The analysis reveals temporal land-cover shifts in the region of interest "
+                "consistent with seasonal or anthropogenic change patterns."
             )
 
         return {

@@ -15,6 +15,7 @@ Start the server:
   uvicorn backend.main:app --reload --port 8000
 """
 from __future__ import annotations
+from contextlib import asynccontextmanager
 
 import json
 import logging
@@ -108,6 +109,16 @@ _CORS_ORIGINS = [
 # App
 # ---------------------------------------------------------------------------
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # ── Startup ────────────────────────────────────────────────────────────
+    logger.info("SatQuery AI starting up …")
+    warm_up_all_models()
+    yield
+    # ── Shutdown ───────────────────────────────────────────────────────────
+    logger.info("SatQuery AI shutting down.")
+
+
 app = FastAPI(
     title="SatQuery AI",
     description=(
@@ -117,6 +128,7 @@ app = FastAPI(
     version="0.1.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
+    lifespan=lifespan,
 )
 
 # Robust CORS: explicitly configured origins + regex for any Vercel/Render frontend deploy
@@ -131,14 +143,8 @@ app.add_middleware(
 
 
 # ---------------------------------------------------------------------------
-# Startup
+# Routes below — startup/shutdown handled via lifespan above
 # ---------------------------------------------------------------------------
-
-@app.on_event("startup")
-async def on_startup() -> None:
-    logger.info("SatQuery AI starting up …")
-    warm_up_all_models()
-    logger.info("All specialist models warmed up.")
 
 
 # ---------------------------------------------------------------------------
