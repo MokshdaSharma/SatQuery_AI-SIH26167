@@ -28,19 +28,19 @@ def kaggle_post(endpoint, data=None, files=None):
 # ── Notebook definitions ──────────────────────────────────────────────────────
 NOTEBOOKS = [
     {
-        "slug":            "pipeline-a-vqa-bigearthnet",
+        "slug":            "satquery-ai-pipeline-a-vqa-bigearthnet",
         "title":           "SatQuery AI Pipeline A VQA BigEarthNet",
         "nb_path":         "notebooks/pipeline_a_vqa_bigearthnet.ipynb",
         "dataset_sources": ["javidtheimmortal/bigearthnetsentinel1"],
     },
     {
-        "slug":            "pipeline-b-change-vqa-cdvqa",
+        "slug":            "satquery-ai-pipeline-b-change-vqa-cdvqa",
         "title":           "SatQuery AI Pipeline B Change VQA CDVQA",
         "nb_path":         "notebooks/pipeline_b_change_vqa_cdvqa.ipynb",
         "dataset_sources": [],
     },
     {
-        "slug":            "pipeline-c-change-segmentation-second",
+        "slug":            "satquery-ai-pipeline-c-change-segmentation-second",
         "title":           "SatQuery AI Pipeline C Change Segmentation SECOND",
         "nb_path":         "notebooks/pipeline_c_change_segmentation_second.ipynb",
         "dataset_sources": [],
@@ -77,6 +77,7 @@ for nb in NOTEBOOKS:
     }
 
     # Check if kernel already exists (to decide create vs update)
+    payload["slug"] = slug
     check = requests.get(
         f"{BASE_URL}/kernels/{KAGGLE_USER}/{slug}",
         headers=HEADERS, timeout=15
@@ -84,12 +85,11 @@ for nb in NOTEBOOKS:
 
     if check.status_code == 200:
         print(f"  Kernel exists — pushing new version...")
-        # For updates, include the existing slug
         payload["id"] = f"{KAGGLE_USER}/{slug}"
-        resp = kaggle_post("/kernels/push", data=payload)
     else:
         print(f"  Creating new kernel...")
-        resp = kaggle_post("/kernels/push", data=payload)
+
+    resp = kaggle_post("/kernels/push", data=payload)
 
     if resp.status_code in (200, 201):
         result = resp.json()

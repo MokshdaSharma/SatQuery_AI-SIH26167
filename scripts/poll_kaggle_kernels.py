@@ -24,12 +24,12 @@ TERMINAL = {"complete", "error", "cancelAcknowledged", "cancelled", "failed"}
 
 def check_status(slug):
     resp = requests.get(
-        f"{BASE_URL}/kernels/{KAGGLE_USER}/{slug}",
+        f"{BASE_URL}/kernels/status?userName={KAGGLE_USER}&kernelSlug={slug}",
         headers=HEADERS, timeout=20
     )
     if resp.status_code == 200:
         d = resp.json()
-        return d.get("currentRunningVersion", {}).get("status", "unknown")
+        return d.get("status", "unknown")
     return f"http_{resp.status_code}"
 
 
