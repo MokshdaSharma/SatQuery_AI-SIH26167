@@ -17,6 +17,9 @@ import { useCallback, useEffect, useState } from "react";
 import MapView     from "./components/MapView";
 import QueryPanel  from "./components/QueryPanel";
 import ResultPanel from "./components/ResultPanel";
+import ErrorBoundary from "./components/ErrorBoundary";
+import ToastContainer, { useToast } from "./components/Toast";
+import KeyboardShortcuts from "./components/KeyboardShortcuts";
 import { fetchImagery, submitQuery, fetchLayer, exportSession, uploadImage } from "./api";
 
 const INITIAL_LAYER_VISIBILITY = {
@@ -30,7 +33,7 @@ const INITIAL_LAYER_VISIBILITY = {
   deforestation:     false,
 };
 
-export default function App() {
+function AppInner() {
   const [roi,             setRoi]             = useState(null);
   const [imageryResult,   setImageryResult]   = useState(null);
   const [queryResult,     setQueryResult]     = useState(null);
@@ -43,10 +46,17 @@ export default function App() {
   const [layerData,       setLayerData]       = useState({});
 
   // Upload state
-  const [uploadResult,   setUploadResult]   = useState(null);  // UploadResponse
+  const [uploadResult,   setUploadResult]   = useState(null);
   const [isUploading,    setIsUploading]    = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError,    setUploadError]    = useState(null);
+
+  // Responsive sidebar state
+  const [sidebarOpen,  setSidebarOpen]  = useState(false);
+  const [resultsOpen,  setResultsOpen]  = useState(false);
+
+  // Toast notifications
+  const { toasts, addToast, removeToast } = useToast();
 
   // Build the overlay descriptor MapView expects whenever uploadResult changes
   const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
@@ -74,7 +84,10 @@ export default function App() {
     setError(null);
     setLayerData({});
     setLayerVisibility(INITIAL_LAYER_VISIBILITY);
-  }, []);
+    if (geom) {
+      addToast({ type: "success", title: "Region drawn", message: "Polygon ROI is ready for analysis.", duration: 3000 });
+    }
+  }, [addToast]);
 
   // ── Upload handlers ─────────────────────────────────────────────────────────
   const handleUploadFile = useCallback(async (file) => {
@@ -88,12 +101,14 @@ export default function App() {
     try {
       const result = await uploadImage(file, setUploadProgress);
       setUploadResult(result);
+      addToast({ type: "success", title: "Image uploaded", message: `${result.filename} ready for analysis.`, duration: 4000 });
     } catch (err) {
       setUploadError(err.message || "Upload failed.");
+      addToast({ type: "error", title: "Upload failed", message: err.message, duration: 6000 });
     } finally {
       setIsUploading(false);
     }
-  }, []);
+  }, [addToast]);
 
   const handleUploadClear = useCallback(() => {
     setUploadResult(null);
@@ -109,9 +124,8 @@ export default function App() {
     const newVisible = !layerVisibility[name];
     setLayerVisibility((prev) => ({ ...prev, [name]: newVisible }));
 
-    if (!newVisible) return; // just hiding — no fetch needed
+    if (!newVisible) return;
 
-    // Fetch layer data if not already loaded and it's a GEE/OSM layer
     const geeLayerNames = ["water", "roads", "buildings", "vegetation"];
     if (geeLayerNames.includes(name) && !layerData[name] && roi) {
       try {
@@ -126,7 +140,6 @@ export default function App() {
   // ── Main submit handler ───────────────────────────────────────────────────────
   const handleSubmit = useCallback(async (params) => {
     const isUploadMode = params.inputMode === "upload";
-    // Need either an ROI (ROI mode) or an uploaded image (upload mode)
     if (!isUploadMode && !roi) return;
     if (isUploadMode && !uploadResult) return;
     setIsLoading(true);
@@ -135,7 +148,7 @@ export default function App() {
     setExportResult(null);
 
     try {
-      // Step 1: Fetch imagery only in ROI mode (upload mode uses already-uploaded refs)
+      // Step 1: Fetch imagery only in ROI mode
       let imagery = imageryResult;
       if (!isUploadMode && !imagery) {
         try {
@@ -151,9 +164,9 @@ export default function App() {
         }
       }
 
-      // Step 2: Run query — use uploaded session_id as roiGeojson placeholder if no ROI
+      // Step 2: Run query
       const result = await submitQuery({
-        roiGeojson:  roi || { type: "Point", coordinates: [0, 0] }, // backend ignores in upload mode
+        roiGeojson:  roi || { type: "Point", coordinates: [0, 0] },
         query:       params.query,
         imageRefs:   params.imageRefs,
         modality:    params.modality,
@@ -165,13 +178,22 @@ export default function App() {
 
       setQueryResult(result);
 
+      // Auto-open results on mobile
+      setResultsOpen(true);
+
+      addToast({
+        type: "success",
+        title: "Analysis complete",
+        message: `${result.task_type.replace("_", " ")} — ${(result.confidence * 100).toFixed(0)}% confidence`,
+        duration: 5000,
+      });
+
       // Auto-enable change-type layers if detected
       if (result.change_types?.length > 0) {
         const updates = {};
         result.change_types.forEach((ct) => { updates[ct] = true; });
         setLayerVisibility((prev) => ({ ...prev, ...updates }));
 
-        // If evidence has change_type features, push them to layerData
         if (result.evidence_geojson) {
           const byType = {};
           result.evidence_geojson.features?.forEach((f) => {
@@ -190,10 +212,11 @@ export default function App() {
       }
     } catch (err) {
       setError(err.message || "An unexpected error occurred.");
+      addToast({ type: "error", title: "Analysis failed", message: err.message, duration: 8000 });
     } finally {
       setIsLoading(false);
     }
-  }, [roi, imageryResult, uploadResult]);
+  }, [roi, imageryResult, uploadResult, addToast]);
 
   // ── Export handler ─────────────────────────────────────────────────────────
   const handleExport = useCallback(async (formats) => {
@@ -202,85 +225,152 @@ export default function App() {
     try {
       const result = await exportSession(queryResult.session_id, formats);
       setExportResult(result);
+      addToast({ type: "success", title: "Export ready", message: `${result.files?.length} file(s) available for download.`, duration: 5000 });
     } catch (err) {
       console.error("Export failed:", err.message);
+      addToast({ type: "error", title: "Export failed", message: err.message, duration: 6000 });
     } finally {
       setIsExporting(false);
     }
-  }, [queryResult]);
+  }, [queryResult, addToast]);
 
-  // ── Show change-type toggles only after a change query ────────────────────
+  // ── Keyboard shortcut handlers ─────────────────────────────────────────────
+  const handleShortcutSubmit = useCallback(() => {
+    // Trigger the submit button programmatically
+    document.getElementById("submit-query")?.click();
+  }, []);
+
+  const handleToggleLeft = useCallback(() => {
+    setSidebarOpen((v) => !v);
+    setResultsOpen(false);
+  }, []);
+
+  const handleToggleRight = useCallback(() => {
+    setResultsOpen((v) => !v);
+    setSidebarOpen(false);
+  }, []);
+
+  // Close panels on backdrop click
+  const handleBackdropClick = useCallback(() => {
+    setSidebarOpen(false);
+    setResultsOpen(false);
+  }, []);
+
   const showChangeTypes = queryResult?.change_types?.length > 0;
 
   return (
-    <div className="app-shell">
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header className="app-header">
-        <div className="app-header__logo">
-          <div className="app-header__logo-icon">🛰</div>
-          <div>
-            <span className="app-header__logo-text">SatQuery AI</span>
-            <div style={{ fontSize: 9.5, color: "var(--color-text-muted)", letterSpacing: "0.05em", marginTop: -2 }}>AI-Powered Satellite Analysis</div>
+    <>
+      {/* Keyboard shortcuts handler */}
+      <KeyboardShortcuts
+        onSubmit={handleShortcutSubmit}
+        onToggleLeft={handleToggleLeft}
+        onToggleRight={handleToggleRight}
+      />
+
+      {/* Toast notifications */}
+      <ToastContainer toasts={toasts} onDismiss={removeToast} />
+
+      {/* Mobile backdrop */}
+      <div
+        className={`mobile-backdrop${sidebarOpen || resultsOpen ? " mobile-backdrop--visible" : ""}`}
+        onClick={handleBackdropClick}
+      />
+
+      <div className="app-shell">
+        {/* ── Header ─────────────────────────────────────────────────────────── */}
+        <header className="app-header" role="banner">
+          {/* Mobile menu toggles */}
+          <button
+            className="mobile-menu-btn"
+            onClick={handleToggleLeft}
+            aria-label="Toggle query panel"
+            title="Toggle query panel"
+          >
+            ☰
+          </button>
+
+          <div className="app-header__logo">
+            <div className="app-header__logo-icon" aria-hidden="true">🛰</div>
+            <div>
+              <span className="app-header__logo-text">SatQuery AI</span>
+              <div className="app-header__subtitle">AI-Powered Satellite Analysis</div>
+            </div>
           </div>
-        </div>
-        <span className="app-header__badge">Beta</span>
+          <span className="app-header__badge">Beta</span>
 
-        {queryResult && (
-          <span style={{
-            marginLeft: 12, fontSize: 11.5,
-            color: "var(--color-text-secondary)",
-            background: "rgba(56,189,248,0.06)",
-            border: "1px solid var(--color-border)",
-            borderRadius: 20, padding: "2px 10px",
-          }}>
-            {queryResult.task_type.replace("_", " ")} · {(queryResult.confidence * 100).toFixed(0)}% confidence
-          </span>
-        )}
+          {queryResult && (
+            <span className="app-header__context-badge">
+              {queryResult.task_type.replace("_", " ")} · {(queryResult.confidence * 100).toFixed(0)}% confidence
+            </span>
+          )}
 
-        <div className="app-header__status">
-          <div className={`status-dot${backendOnline === false ? " offline" : ""}`} />
-          <span style={{ fontSize: 11.5 }}>
-            {backendOnline === null  ? "Connecting…"
-             : backendOnline        ? "AI Engine Online"
-             :                        "Engine Offline"}
-          </span>
-        </div>
-      </header>
+          <div className="app-header__status">
+            <div className={`status-dot${backendOnline === false ? " offline" : ""}`} />
+            <span style={{ fontSize: 11.5 }}>
+              {backendOnline === null  ? "Connecting…"
+               : backendOnline        ? "AI Engine Online"
+               :                        "Engine Offline"}
+            </span>
+          </div>
 
-      {/* ── Left sidebar ─────────────────────────────────────────────── */}
-      <QueryPanel
-        roi={roi}
-        onSubmit={handleSubmit}
-        isLoading={isLoading}
-        imageryResult={imageryResult}
-        onUploadFile={handleUploadFile}
-        uploadResult={uploadResult}
-        isUploading={isUploading}
-        uploadProgress={uploadProgress}
-        uploadError={uploadError}
-        onUploadClear={handleUploadClear}
-      />
+          {/* Mobile results toggle */}
+          <button
+            className="mobile-menu-btn"
+            onClick={handleToggleRight}
+            aria-label="Toggle results panel"
+            title="Toggle results panel"
+            style={{ display: "none" }} // Shown via CSS on mobile
+          >
+            📊
+          </button>
+        </header>
 
-      {/* ── Map ───────────────────────────────────────────────────────────── */}
-      <MapView
-        onROIChange={handleROIChange}
-        evidenceGeojson={queryResult?.evidence_geojson}
-        layerVisibility={layerVisibility}
-        onLayerToggle={handleLayerToggle}
-        layerData={layerData}
-        showChangeTypes={showChangeTypes}
-        uploadedImageOverlay={uploadedImageOverlay}
-      />
+        {/* ── Left sidebar ─────────────────────────────────────────────── */}
+        <QueryPanel
+          roi={roi}
+          onSubmit={handleSubmit}
+          isLoading={isLoading}
+          imageryResult={imageryResult}
+          onUploadFile={handleUploadFile}
+          uploadResult={uploadResult}
+          isUploading={isUploading}
+          uploadProgress={uploadProgress}
+          uploadError={uploadError}
+          onUploadClear={handleUploadClear}
+          className={sidebarOpen ? "sidebar--open" : ""}
+        />
 
-      {/* ── Right results panel ─────────────────────────────────────────────── */}
-      <ResultPanel
-        result={queryResult}
-        isLoading={isLoading}
-        error={error}
-        onExport={handleExport}
-        isExporting={isExporting}
-        exportResult={exportResult}
-      />
-    </div>
+        {/* ── Map ───────────────────────────────────────────────────────────── */}
+        <MapView
+          onROIChange={handleROIChange}
+          evidenceGeojson={queryResult?.evidence_geojson}
+          layerVisibility={layerVisibility}
+          onLayerToggle={handleLayerToggle}
+          layerData={layerData}
+          showChangeTypes={showChangeTypes}
+          uploadedImageOverlay={uploadedImageOverlay}
+        />
+
+        {/* ── Right results panel ─────────────────────────────────────────────── */}
+        <ResultPanel
+          result={queryResult}
+          isLoading={isLoading}
+          error={error}
+          onExport={handleExport}
+          isExporting={isExporting}
+          exportResult={exportResult}
+          className={resultsOpen ? "results-panel--open" : ""}
+        />
+      </div>
+    </>
+  );
+}
+
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <a href="#query-input" className="skip-link">Skip to query input</a>
+      <AppInner />
+    </ErrorBoundary>
   );
 }

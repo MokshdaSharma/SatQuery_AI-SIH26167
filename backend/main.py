@@ -34,22 +34,41 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .controller.aggregator import aggregate
-from .controller.input_validator import InputValidationError, validate_inputs
-from .controller.router import dispatch, warm_up_all_models
-from .controller.task_classifier import classify_task
-from .schemas.requests import ExportRequest, FetchImageryRequest, QueryRequest
-from .schemas.responses import (
-    ExecutionStep,
-    ExportFile,
-    ExportResponse,
-    ImageryItem,
-    ImageryResponse,
-    LayerResponse,
-    QueryResponse,
-    UploadResponse,
-)
-from .services import export_service, gee_service, image_upload_service, map_layers_service
+# Support both package-mode (uvicorn backend.main:app) and standalone (gunicorn main:app)
+try:
+    from .controller.aggregator import aggregate
+    from .controller.input_validator import InputValidationError, validate_inputs
+    from .controller.router import dispatch, warm_up_all_models
+    from .controller.task_classifier import classify_task
+    from .schemas.requests import ExportRequest, FetchImageryRequest, QueryRequest
+    from .schemas.responses import (
+        ExecutionStep,
+        ExportFile,
+        ExportResponse,
+        ImageryItem,
+        ImageryResponse,
+        LayerResponse,
+        QueryResponse,
+        UploadResponse,
+    )
+    from .services import export_service, gee_service, image_upload_service, map_layers_service
+except ImportError:
+    from controller.aggregator import aggregate
+    from controller.input_validator import InputValidationError, validate_inputs
+    from controller.router import dispatch, warm_up_all_models
+    from controller.task_classifier import classify_task
+    from schemas.requests import ExportRequest, FetchImageryRequest, QueryRequest
+    from schemas.responses import (
+        ExecutionStep,
+        ExportFile,
+        ExportResponse,
+        ImageryItem,
+        ImageryResponse,
+        LayerResponse,
+        QueryResponse,
+        UploadResponse,
+    )
+    from services import export_service, gee_service, image_upload_service, map_layers_service
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -92,10 +111,12 @@ app = FastAPI(
     redoc_url="/api/redoc",
 )
 
+# Robust CORS: explicitly configured origins + regex for any Vercel/Render frontend deploy
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_CORS_ORIGINS,
-    allow_credentials=True,
+    allow_origins=_CORS_ORIGINS if "*" not in _CORS_ORIGINS else ["*"],
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|.*\.vercel\.app|.*\.onrender\.com)(:\d+)?$" if "*" not in _CORS_ORIGINS else None,
+    allow_credentials=True if "*" not in _CORS_ORIGINS else False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -115,6 +136,12 @@ async def on_startup() -> None:
 # ---------------------------------------------------------------------------
 # Health check
 # ---------------------------------------------------------------------------
+
+@app.get("/", tags=["Meta"])
+@app.head("/", tags=["Meta"])
+def root():
+    return {"status": "ok", "service": "SatQuery AI"}
+
 
 @app.get("/healthz", tags=["Meta"])
 def health_check():

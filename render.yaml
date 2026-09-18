@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: satquery-ai-backend
+    runtime: python
+    plan: free
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: cd backend && gunicorn main:app -w 1 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT --timeout 120
+    envVars:
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: SESSIONS_DIR
+        value: ./sessions
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      # Optional Secrets to set in Render Dashboard (Environment):
+      # - OPENAI_API_KEY
+      # - MAPBOX_TOKEN
+      # - GEE_SERVICE_ACCOUNT_KEY_JSON
+      # - GEE_SERVICE_ACCOUNT_EMAIL
+      # - GEE_PROJECT_ID
+      # - HF_TOKEN

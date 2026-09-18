@@ -30,7 +30,10 @@ try:
 except ImportError:
     _GEE_AVAILABLE = False
 
-from .gee_service import _init_gee, _parse_roi
+try:
+    from .gee_service import _init_gee, _parse_roi
+except ImportError:
+    from services.gee_service import _init_gee, _parse_roi
 
 _OVERPASS_ENDPOINTS = [
     "https://overpass-api.de/api/interpreter",

@@ -15,7 +15,10 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List
 
-from .base_model import SpecialistModel
+try:
+    from .base_model import SpecialistModel
+except ImportError:
+    from models.base_model import SpecialistModel
 
 logger = logging.getLogger(__name__)
 

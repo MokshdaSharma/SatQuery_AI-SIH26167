@@ -65,27 +65,21 @@ export default function ImageUploadPanel({
       {!hasResult && !isUploading && (
         <div
           id="upload-drop-zone"
+          className={`upload-zone${dragOver ? " upload-zone--drag-over" : ""}`}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
-          style={{
-            border: `2px dashed ${dragOver ? "var(--color-brand-primary)" : "var(--color-border)"}`,
-            borderRadius: "var(--radius-lg)",
-            padding: "20px 16px",
-            textAlign: "center",
-            cursor: "pointer",
-            background: dragOver
-              ? "rgba(56,189,248,0.06)"
-              : "rgba(255,255,255,0.02)",
-            transition: "all 0.2s ease",
-          }}
+          role="button"
+          tabIndex={0}
+          aria-label="Upload satellite image"
+          onKeyDown={(e) => e.key === "Enter" && fileInputRef.current?.click()}
         >
-          <div style={{ fontSize: 28, marginBottom: 8, opacity: 0.6 }}>🛰️</div>
-          <p style={{ fontSize: 13, fontWeight: 500, color: "var(--color-text-primary)", marginBottom: 4 }}>
+          <div className="upload-zone__icon">🛰️</div>
+          <p className="upload-zone__title">
             Drop image here or click to browse
           </p>
-          <p style={{ fontSize: 11, color: "var(--color-text-muted)" }}>
+          <p className="upload-zone__subtitle">
             {ACCEPTED_LABEL} · Max {MAX_MB} MB
           </p>
           <input
@@ -101,10 +95,10 @@ export default function ImageUploadPanel({
 
       {/* ── Upload progress ────────────────────────────────────────────────── */}
       {isUploading && (
-        <div className="card animate-in" style={{ padding: "14px 16px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+        <div className="card animate-in upload-progress">
+          <div className="upload-progress__header">
             <div className="spinner" style={{ width: 18, height: 18, borderWidth: 2 }} />
-            <span style={{ fontSize: 13, fontWeight: 500 }}>
+            <span className="upload-progress__text">
               {uploadProgress < 100 ? `Uploading… ${uploadProgress}%` : "Processing image…"}
             </span>
           </div>
@@ -115,7 +109,7 @@ export default function ImageUploadPanel({
             />
           </div>
           {uploadProgress === 100 && (
-            <p style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 6 }}>
+            <p className="upload-progress__sub">
               Extracting georeferencing &amp; generating preview…
             </p>
           )}
@@ -124,7 +118,7 @@ export default function ImageUploadPanel({
 
       {/* ── Upload error ───────────────────────────────────────────────────── */}
       {uploadError && (
-        <div className="error-banner">
+        <div className="error-banner" role="alert">
           <span>❌</span>
           <span>{uploadError}</span>
         </div>
@@ -132,41 +126,40 @@ export default function ImageUploadPanel({
 
       {/* ── Result card ────────────────────────────────────────────────────── */}
       {hasResult && !isUploading && (
-        <div className="card animate-in" style={{ padding: "12px 14px" }}>
+        <div className="card animate-in upload-result">
           {/* Preview image */}
           {uploadResult.preview_url && (
-            <div style={{ marginBottom: 10, borderRadius: 8, overflow: "hidden", border: "1px solid var(--color-border)" }}>
+            <div className="upload-result__preview">
               <img
                 src={`${BASE_URL}${uploadResult.preview_url}`}
                 alt="Uploaded image preview"
-                style={{ width: "100%", display: "block", maxHeight: 160, objectFit: "cover" }}
               />
             </div>
           )}
 
           {/* Filename + modality */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-            <span style={{ fontSize: 16 }}>
+          <div className="upload-result__file-row">
+            <span className="upload-result__file-icon">
               {uploadResult.modality === "uploaded_sar" ? "📡" : "🛰️"}
             </span>
-            <span style={{ fontSize: 12, fontWeight: 500, flex: 1, wordBreak: "break-all" }}>
+            <span className="upload-result__filename">
               {uploadResult.filename}
             </span>
           </div>
 
           {/* Georef badge */}
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-            <span className={`task-badge ${uploadResult.has_georef ? "grounding" : "vqa"}`} style={{ fontSize: 10 }}>
+          <div className="upload-result__badges">
+            <span className={`task-badge ${uploadResult.has_georef ? "grounding" : "vqa"}`}>
               {uploadResult.has_georef ? "✓ Georeferenced" : "⚠ No geo-ref"}
             </span>
-            <span className="task-badge caption" style={{ fontSize: 10 }}>
+            <span className="task-badge caption">
               {uploadResult.modality.replace("uploaded_", "").toUpperCase() || "UPLOADED"}
             </span>
           </div>
 
           {/* Bounds info */}
           {uploadResult.geo_bounds && (
-            <p style={{ fontSize: 10, color: "var(--color-text-muted)", fontFamily: "'JetBrains Mono', monospace", marginBottom: 6 }}>
+            <p className="upload-result__bounds">
               W:{uploadResult.geo_bounds[0].toFixed(4)} S:{uploadResult.geo_bounds[1].toFixed(4)}{" "}
               E:{uploadResult.geo_bounds[2].toFixed(4)} N:{uploadResult.geo_bounds[3].toFixed(4)}
             </p>
@@ -181,7 +174,7 @@ export default function ImageUploadPanel({
 
           {/* Map overlay note */}
           {uploadResult.has_georef && (
-            <p style={{ fontSize: 11, color: "var(--color-brand-accent)", marginBottom: 6 }}>
+            <p className="upload-result__overlay-note">
               ✓ Image overlaid on map
             </p>
           )}
@@ -190,9 +183,8 @@ export default function ImageUploadPanel({
           <button
             type="button"
             id="upload-clear-btn"
-            className="btn btn-ghost btn-xs"
+            className="btn btn-ghost btn-xs upload-result__clear-btn"
             onClick={onClear}
-            style={{ width: "100%", borderTop: "1px solid var(--color-border)", paddingTop: 8, marginTop: 4 }}
           >
             ✕ Remove &amp; upload another
           </button>

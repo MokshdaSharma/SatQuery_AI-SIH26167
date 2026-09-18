@@ -10,9 +10,14 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from .task_classifier import (
-    CAPTION, CHANGE_VQA, FUSION, GROUNDING, TaskType, VQA,
-)
+try:
+    from .task_classifier import (
+        CAPTION, CHANGE_VQA, FUSION, GROUNDING, TaskType, VQA,
+    )
+except ImportError:
+    from controller.task_classifier import (
+        CAPTION, CHANGE_VQA, FUSION, GROUNDING, TaskType, VQA,
+    )
 
 logger = logging.getLogger(__name__)
 

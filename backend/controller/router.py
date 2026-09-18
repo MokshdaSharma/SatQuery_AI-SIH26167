@@ -17,14 +17,24 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List
 
-from ..models.change_segmentation_model import ChangeSegmentationModel
-from ..models.change_vqa_model import ChangeVQAModel
-from ..models.fusion_model import FusionModel
-from ..models.grounding_model import GroundingModel
-from ..models.vqa_caption_model import VQACaptionModel
-from .task_classifier import (
-    CAPTION, CHANGE_VQA, FUSION, GROUNDING, TaskType, VQA,
-)
+try:
+    from ..models.change_segmentation_model import ChangeSegmentationModel
+    from ..models.change_vqa_model import ChangeVQAModel
+    from ..models.fusion_model import FusionModel
+    from ..models.grounding_model import GroundingModel
+    from ..models.vqa_caption_model import VQACaptionModel
+    from .task_classifier import (
+        CAPTION, CHANGE_VQA, FUSION, GROUNDING, TaskType, VQA,
+    )
+except ImportError:
+    from models.change_segmentation_model import ChangeSegmentationModel
+    from models.change_vqa_model import ChangeVQAModel
+    from models.fusion_model import FusionModel
+    from models.grounding_model import GroundingModel
+    from models.vqa_caption_model import VQACaptionModel
+    from controller.task_classifier import (
+        CAPTION, CHANGE_VQA, FUSION, GROUNDING, TaskType, VQA,
+    )
 
 logger = logging.getLogger(__name__)
 

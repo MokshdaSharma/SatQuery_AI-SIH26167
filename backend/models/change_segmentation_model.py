@@ -20,7 +20,10 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
-from .base_model import SpecialistModel
+try:
+    from .base_model import SpecialistModel
+except ImportError:
+    from models.base_model import SpecialistModel
 
 logger = logging.getLogger(__name__)
 

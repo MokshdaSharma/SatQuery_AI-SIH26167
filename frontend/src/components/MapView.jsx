@@ -158,6 +158,7 @@ export default function MapView({
   const [mapReady, setMapReady] = useState(false);
   const [tokenMissing, setTokenMissing] = useState(false);
   const [hasUploadOverlay, setHasUploadOverlay] = useState(false);
+  const [cursorCoords, setCursorCoords] = useState(null);
 
   // ── Initialise map ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -224,6 +225,12 @@ export default function MapView({
     map.on("draw.update", handleDraw);
     map.on("draw.delete", () => onROIChange?.(null));
 
+    // Cursor coordinates
+    map.on("mousemove", (e) => {
+      setCursorCoords({ lng: e.lngLat.lng.toFixed(5), lat: e.lngLat.lat.toFixed(5) });
+    });
+    map.on("mouseout", () => setCursorCoords(null));
+
     map.on("load", () => {
       mapRef.current  = map;
       drawRef.current = draw;
@@ -250,8 +257,6 @@ export default function MapView({
     if (!uploadedImageOverlay?.url || !uploadedImageOverlay?.corners) return;
 
     const { url, corners, bounds } = uploadedImageOverlay;
-    // corners: [[NW lon,lat],[NE],[SE],[SW]]
-    // Mapbox image source expects: [tl, tr, br, bl] as [lon, lat]
     try {
       map.addSource(UPLOADED_IMG_SRC, {
         type: "image",
@@ -271,7 +276,6 @@ export default function MapView({
       });
       setHasUploadOverlay(true);
 
-      // Fly to image bounds whenever a georef image is loaded
       if (bounds) {
         map.fitBounds(
           [[bounds[0], bounds[1]], [bounds[2], bounds[3]]],
@@ -306,7 +310,6 @@ export default function MapView({
     if (!mapReady || !mapRef.current) return;
     const map = mapRef.current;
 
-    // All layers now return GeoJSON — water and vegetation are polygon fills
     const vectorLayers = [
       "water", "vegetation",
       "roads", "buildings",
@@ -333,7 +336,6 @@ export default function MapView({
         map.addSource(srcId, { type: "geojson", data });
         map.addLayer({ id: layerId, source: srcId, ...config });
 
-        // Add outline layer for filled polygon layers
         const outlineConfig = LAYER_CONFIGS[`${name}_outline`];
         if (outlineConfig) {
           map.addLayer({ id: `${layerId}-outline`, source: srcId, ...outlineConfig });
@@ -369,16 +371,16 @@ export default function MapView({
   const changeToggles = ["new_construction", "demolition", "vegetation_growth", "deforestation"];
 
   return (
-    <div className="map-area">
+    <div className="map-area" role="application" aria-label="Satellite map">
       <div ref={mapContainerRef} style={{ width: "100%", height: "100%" }} />
 
       {/* Layer toggle panel */}
       <div className="map-overlay-panel">
-        <div className="card" style={{ padding: "10px 12px", minWidth: 180 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: "var(--color-brand-primary)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8, display: "flex", alignItems: "center", gap: 5 }}>
+        <div className="card layer-panel">
+          <div className="layer-panel__title">
             <span>🗂</span> Map Layers
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+          <div className="layer-panel__list">
             {baseToggles.map((name) => {
               const isActive = layerVisibility?.[name];
               const hasData = !!(layerData?.[name]?.geojson?.features?.length);
@@ -386,30 +388,22 @@ export default function MapView({
                 <button
                   key={name}
                   id={`layer-toggle-${name}`}
+                  className={`layer-toggle-btn${isActive ? " layer-toggle-btn--active" : ""}`}
                   onClick={() => onLayerToggle?.(name)}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 7,
-                    padding: "6px 9px", borderRadius: 7, cursor: "pointer",
-                    background: isActive ? "rgba(56,189,248,0.14)" : "rgba(255,255,255,0.03)",
-                    border: isActive ? "1px solid rgba(56,189,248,0.4)" : "1px solid rgba(56,189,248,0.12)",
-                    color: isActive ? "var(--color-brand-primary)" : "var(--color-text-secondary)",
-                    transition: "all 0.2s", textAlign: "left",
-                  }}
+                  aria-pressed={isActive}
                 >
-                  <span style={{ fontSize: 13 }}>{LAYER_LABELS[name].split(" ")[0]}</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 11.5, fontWeight: 500 }}>{LAYER_LABELS[name].split(" ").slice(1).join(" ")}</div>
+                  <span className="layer-toggle-btn__icon">{LAYER_LABELS[name].split(" ")[0]}</span>
+                  <div className="layer-toggle-btn__info">
+                    <div className="layer-toggle-btn__name">{LAYER_LABELS[name].split(" ").slice(1).join(" ")}</div>
                     {LAYER_SOURCE[name] && (
-                      <div style={{ fontSize: 9.5, color: isActive ? "rgba(56,189,248,0.6)" : "var(--color-text-muted)", marginTop: 1 }}>
-                        {LAYER_SOURCE[name]}
-                      </div>
+                      <div className="layer-toggle-btn__source">{LAYER_SOURCE[name]}</div>
                     )}
                   </div>
                   {isActive && hasData && (
-                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--color-brand-accent)", flexShrink: 0 }} />
+                    <div className="layer-toggle-btn__dot layer-toggle-btn__dot--loaded" />
                   )}
                   {isActive && !hasData && (
-                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--color-brand-warning)", flexShrink: 0, animation: "pulse 1.5s ease-in-out infinite" }} />
+                    <div className="layer-toggle-btn__dot layer-toggle-btn__dot--loading" />
                   )}
                 </button>
               );
@@ -417,37 +411,39 @@ export default function MapView({
 
             {showChangeTypes && (
               <>
-                <div style={{ fontSize: 9, fontWeight: 700, color: "var(--color-text-muted)", letterSpacing: "0.08em", textTransform: "uppercase", marginTop: 6, marginBottom: 3 }}>Detected Changes</div>
+                <div className="layer-panel__separator">Detected Changes</div>
                 {changeToggles.map((name) => (
                   <button
                     key={name}
                     id={`layer-toggle-${name}`}
+                    className={`layer-toggle-btn${layerVisibility?.[name] ? " layer-toggle-btn--active" : ""}`}
                     onClick={() => onLayerToggle?.(name)}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 7,
-                      padding: "6px 9px", borderRadius: 7, cursor: "pointer",
-                      background: layerVisibility?.[name] ? "rgba(56,189,248,0.14)" : "rgba(255,255,255,0.03)",
-                      border: layerVisibility?.[name] ? "1px solid rgba(56,189,248,0.4)" : "1px solid rgba(56,189,248,0.12)",
-                      color: layerVisibility?.[name] ? "var(--color-brand-primary)" : "var(--color-text-secondary)",
-                      transition: "all 0.2s", textAlign: "left",
-                      fontSize: 11.5, fontWeight: 500,
-                    }}
+                    aria-pressed={layerVisibility?.[name]}
                   >
-                    <span style={{ fontSize: 13 }}>{LAYER_LABELS[name].split(" ")[0]}</span>
-                    {LAYER_LABELS[name].split(" ").slice(1).join(" ")}
+                    <span className="layer-toggle-btn__icon">{LAYER_LABELS[name].split(" ")[0]}</span>
+                    <div className="layer-toggle-btn__info">
+                      <div className="layer-toggle-btn__name">{LAYER_LABELS[name].split(" ").slice(1).join(" ")}</div>
+                    </div>
                   </button>
                 ))}
               </>
             )}
           </div>
 
-          {/* Legend tip */}
-          <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(56,189,248,0.1)", fontSize: 9.5, color: "var(--color-text-muted)", lineHeight: 1.5 }}>
+          {/* Legend */}
+          <div className="layer-panel__legend">
             <span style={{ color: "var(--color-brand-accent)" }}>●</span> = loaded &nbsp;
             <span style={{ color: "var(--color-brand-warning)" }}>●</span> = loading
           </div>
         </div>
       </div>
+
+      {/* Coordinates overlay */}
+      {cursorCoords && (
+        <div className="map-coords" aria-live="polite">
+          {cursorCoords.lat}°N, {cursorCoords.lng}°E
+        </div>
+      )}
 
       {/* Drawing hint */}
       {!mapReady && (

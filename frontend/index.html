@@ -3,13 +3,103 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SatQuery AI — Remote Sensing VLM Assistant</title>
-    <meta name="description" content="Agentic vision-language assistant for satellite image analysis. Draw an ROI, ask a question, get a grounded answer." />
-    <meta name="theme-color" content="#050c1a" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛰</text></svg>" />
+
+    <!-- Primary Meta -->
+    <title>SatQuery AI — AI-Powered Satellite Image Analysis</title>
+    <meta name="description" content="Agentic vision-language assistant for satellite image analysis. Draw an ROI on a map, ask a natural-language question, and get a grounded answer with visual evidence." />
+    <meta name="keywords" content="satellite, remote sensing, AI, VLM, GIS, geospatial, Earth observation, change detection, visual question answering" />
+    <meta name="author" content="SatQuery AI Team" />
+    <meta name="theme-color" content="#030a18" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="SatQuery AI — AI-Powered Satellite Analysis" />
+    <meta property="og:description" content="Draw a region on a satellite map, ask a question, and let AI analyze imagery from Sentinel-1/2 with grounded visual evidence." />
+    <meta property="og:site_name" content="SatQuery AI" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="SatQuery AI — AI-Powered Satellite Analysis" />
+    <meta name="twitter:description" content="Agentic vision-language assistant for satellite image analysis with change detection and sensor fusion." />
+
+    <!-- Performance hints -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://api.mapbox.com" />
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛰</text></svg>" />
+
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "SatQuery AI",
+      "description": "Agentic vision-language assistant for remote-sensing image analysis",
+      "applicationCategory": "Geospatial Analysis",
+      "operatingSystem": "Web Browser",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+    }
+    </script>
+
+    <!-- Critical CSS for splash -->
+    <style>
+      body { margin: 0; background: #030a18; }
+      .splash-screen {
+        position: fixed; inset: 0; background: #030a18;
+        display: flex; flex-direction: column; align-items: center;
+        justify-content: center; gap: 16px; z-index: 99999;
+        transition: opacity 0.5s ease;
+        font-family: 'Inter', system-ui, sans-serif;
+      }
+      .splash-screen--hidden { opacity: 0; pointer-events: none; }
+      .splash-logo { font-size: 42px; animation: sp-float 2s ease-in-out infinite; }
+      .splash-text {
+        font-size: 16px; font-weight: 700; letter-spacing: -0.02em;
+        background: linear-gradient(90deg, #38bdf8, #818cf8);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      .splash-bar {
+        width: 100px; height: 3px; background: rgba(255,255,255,0.06);
+        border-radius: 999px; overflow: hidden;
+      }
+      .splash-bar-fill {
+        height: 100%; width: 35%; border-radius: 999px;
+        background: linear-gradient(90deg, #38bdf8, #818cf8);
+        animation: sp-load 1.2s ease-in-out infinite;
+      }
+      @keyframes sp-float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+      @keyframes sp-load { 0% { transform: translateX(-100%); } 100% { transform: translateX(400%); } }
+    </style>
   </head>
   <body>
+    <!-- Splash screen shown while JS loads -->
+    <div id="splash" class="splash-screen" aria-hidden="true">
+      <div class="splash-logo">🛰️</div>
+      <div class="splash-text">SatQuery AI</div>
+      <div class="splash-bar"><div class="splash-bar-fill"></div></div>
+    </div>
+
+    <!-- No-JS fallback -->
+    <noscript>
+      <div style="padding:40px;text-align:center;color:#94a3b8;font-family:system-ui,sans-serif;">
+        <h1 style="color:#38bdf8;">SatQuery AI</h1>
+        <p>JavaScript is required to run this application. Please enable JavaScript and reload.</p>
+      </div>
+    </noscript>
+
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+
+    <!-- Remove splash once app is hydrated -->
+    <script>
+      window.addEventListener('load', () => {
+        const s = document.getElementById('splash');
+        if (s) { s.classList.add('splash-screen--hidden'); setTimeout(() => s.remove(), 600); }
+      });
+    </script>
   </body>
 </html>
