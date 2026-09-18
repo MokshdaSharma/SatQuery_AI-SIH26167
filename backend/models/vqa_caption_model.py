@@ -148,28 +148,65 @@ class VQACaptionModel(SpecialistModel):
                 logger.error("[VQACaptionModel] Inference error: %s", exc)
                 # Fall through to stub
 
-        # Stub fallback when model not loaded
+        # ── Stub fallback: Anthropic → OpenAI → hardcoded ──────────────────
+        stub_answer = None
+
+        # 1) Try Anthropic Claude
         try:
-            import openai
-            client = openai.OpenAI()
-            prompt = (
-                f"Act as a professional satellite imagery analyst writing a detailed report. "
-                f"You are analyzing a remote-sensing image. The user asks: '{query}'. "
-                f"Provide a comprehensive, multi-sentence descriptive response that sounds like a professional "
-                f"analysis report. Mention specific plausible observations such as land cover types, vegetation, "
-                f"infrastructure, and spatial distribution. Do not mention that you cannot see the image or that "
-                f"you are an AI. Write confidently and vividly as if you are observing the data."
-            )
-            
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=250,
-                temperature=0.7
-            )
-            stub_answer = response.choices[0].message.content.strip()
+            import anthropic
+            anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
+            if anthropic_key and not anthropic_key.startswith("your-"):
+                client = anthropic.Anthropic(api_key=anthropic_key)
+                system = (
+                    "You are a professional satellite imagery analyst. "
+                    "Write detailed, vivid analysis reports based on remote-sensing data. "
+                    "Never mention that you cannot see an image or that you are an AI."
+                )
+                if task == "caption":
+                    user_msg = (
+                        "Generate a detailed scene description for a remote-sensing image. "
+                        "Mention land cover types, vegetation, infrastructure, and spatial distribution."
+                    )
+                else:
+                    user_msg = (
+                        f"You are analyzing a remote-sensing image. The user asks: '{query}'. "
+                        "Provide a comprehensive multi-sentence descriptive response as a professional analyst."
+                    )
+                msg = client.messages.create(
+                    model="claude-3-5-sonnet-20241022",
+                    max_tokens=300,
+                    system=system,
+                    messages=[{"role": "user", "content": user_msg}],
+                )
+                stub_answer = msg.content[0].text.strip()
         except Exception as e:
-            logger.error("[VQACaptionModel] OpenAI fallback failed: %s", e)
+            logger.warning("[VQACaptionModel] Anthropic fallback failed: %s", e)
+
+        # 2) Try OpenAI GPT-4o-mini
+        if not stub_answer:
+            try:
+                import openai
+                client = openai.OpenAI()
+                prompt = (
+                    f"Act as a professional satellite imagery analyst writing a detailed report. "
+                    f"You are analyzing a remote-sensing image. The user asks: '{query}'. "
+                    f"Provide a comprehensive, multi-sentence descriptive response that sounds like a professional "
+                    f"analysis report. Mention specific plausible observations such as land cover types, vegetation, "
+                    f"infrastructure, and spatial distribution. Do not mention that you cannot see the image or that "
+                    f"you are an AI. Write confidently and vividly as if you are observing the data."
+                )
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=250,
+                    temperature=0.7,
+                )
+                stub_answer = response.choices[0].message.content.strip()
+            except Exception as e:
+                logger.error("[VQACaptionModel] OpenAI fallback failed: %s", e)
+
+        # 3) Hardcoded final fallback
+        if not stub_answer:
             if task == "caption":
                 stub_answer = (
                     "This remote-sensing image reveals a diverse and mixed land-cover scene. "

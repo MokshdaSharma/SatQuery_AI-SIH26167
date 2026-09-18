@@ -25,9 +25,17 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
+import sys
 
 # Load .env before anything else
 load_dotenv(Path(__file__).parent / ".env")
+
+# Ensure backend/ subpackages are importable both when running as:
+#   uvicorn backend.main:app  (from project root)
+#   uvicorn main:app          (from inside backend/)
+_backend_dir = Path(__file__).parent
+if str(_backend_dir) not in sys.path:
+    sys.path.insert(0, str(_backend_dir))
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware

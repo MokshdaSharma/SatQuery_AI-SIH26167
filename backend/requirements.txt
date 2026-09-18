@@ -25,6 +25,7 @@ requests==2.32.2
 
 # LLM Fallback / Dynamic Analysis
 openai>=1.0.0
+anthropic>=0.30.0
 
 # Export
 reportlab==4.2.0

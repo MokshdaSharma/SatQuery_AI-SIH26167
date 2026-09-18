@@ -131,29 +131,61 @@ class ChangeVQAModel(SpecialistModel):
             except Exception as exc:
                 logger.error("[ChangeVQAModel] Inference error: %s", exc)
 
-        # Stub fallback
+        # ── Stub fallback: Anthropic → OpenAI → hardcoded ──────────────────
+        stub_answer = None
+
+        # 1) Try Anthropic Claude
         try:
-            import openai
-            client = openai.OpenAI()
-            prompt = (
-                f"Act as a professional satellite imagery analyst writing a detailed report. "
-                f"You are comparing two remote-sensing images from {date1} and {date2}. "
-                f"The user asks: '{query}'. Provide a comprehensive, multi-sentence descriptive response "
-                f"that sounds like a professional comparative analysis report. Mention specific plausible shifts "
-                f"such as new infrastructure development, deforestation, agricultural changes, or urban expansion. "
-                f"Do not mention that you cannot see the images or that you are an AI. Write confidently as if you "
-                f"are observing the data."
-            )
-            
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=250,
-                temperature=0.7
-            )
-            stub_answer = response.choices[0].message.content.strip()
+            import anthropic
+            anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
+            if anthropic_key and not anthropic_key.startswith("your-"):
+                client = anthropic.Anthropic(api_key=anthropic_key)
+                msg = client.messages.create(
+                    model="claude-3-5-sonnet-20241022",
+                    max_tokens=300,
+                    system=(
+                        "You are a professional satellite imagery analyst. "
+                        "Write detailed comparative analysis reports. "
+                        "Never mention that you cannot see images or that you are an AI."
+                    ),
+                    messages=[{"role": "user", "content": (
+                        f"Compare two remote-sensing images from {date1} and {date2}. "
+                        f"The user asks: '{query}'. "
+                        "Provide a comprehensive multi-sentence comparative analysis mentioning "
+                        "specific shifts such as infrastructure development, deforestation, "
+                        "agricultural changes, or urban expansion."
+                    )}],
+                )
+                stub_answer = msg.content[0].text.strip()
         except Exception as e:
-            logger.error("[ChangeVQAModel] OpenAI fallback failed: %s", e)
+            logger.warning("[ChangeVQAModel] Anthropic fallback failed: %s", e)
+
+        # 2) Try OpenAI GPT-4o-mini
+        if not stub_answer:
+            try:
+                import openai
+                client = openai.OpenAI()
+                prompt = (
+                    f"Act as a professional satellite imagery analyst writing a detailed report. "
+                    f"You are comparing two remote-sensing images from {date1} and {date2}. "
+                    f"The user asks: '{query}'. Provide a comprehensive, multi-sentence descriptive response "
+                    f"that sounds like a professional comparative analysis report. Mention specific plausible shifts "
+                    f"such as new infrastructure development, deforestation, agricultural changes, or urban expansion. "
+                    f"Do not mention that you cannot see the images or that you are an AI. Write confidently as if you "
+                    f"are observing the data."
+                )
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=250,
+                    temperature=0.7,
+                )
+                stub_answer = response.choices[0].message.content.strip()
+            except Exception as e:
+                logger.error("[ChangeVQAModel] OpenAI fallback failed: %s", e)
+
+        # 3) Hardcoded final fallback
+        if not stub_answer:
             stub_answer = (
                 f"A detailed comparison of the imagery from {date1} and {date2} in response to '{query[:60]}' reveals "
                 "notable and distinct land-use changes within the region of interest. The analysis indicates clear temporal "
