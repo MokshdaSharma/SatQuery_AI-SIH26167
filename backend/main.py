@@ -253,6 +253,7 @@ async def run_query(req: QueryRequest):
         "query": req.query,
         "session_id": session_id,
         "task_type": classification.task_type,
+        "conversation_history": req.conversation_history,
     }
 
     try:
@@ -340,6 +341,9 @@ async def run_query(req: QueryRequest):
         evidence_geojson=result.get("evidence_geojson"),
         segmentation_mask_url=result.get("segmentation_mask_url"),
         change_types=result.get("change_types"),
+        entities=result.get("entities"),
+        change_analytics=result.get("change_analytics"),
+        fusion_analytics=result.get("fusion_analytics"),
         execution_trace=[ExecutionStep(**s) for s in result["execution_trace"]],
         warnings=result["warnings"],
     )

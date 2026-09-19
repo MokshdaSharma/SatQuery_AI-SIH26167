@@ -171,3 +171,9 @@ test_output/
 
 test_layers.py
 FINE_TUNING_REPORT.md
+
+# ─── Agent & IDE metadata ──────────────────────────────────────────
+.gemini/
+.agents/
+.system_generated/
+*.tsbuildinfo

@@ -19,6 +19,60 @@ import MapboxDraw from "@mapbox/mapbox-gl-draw";
 import "mapbox-gl/dist/mapbox-gl.css";
 import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css";
 
+// ── Basemap definitions ──────────────────────────────────────────────────────
+const BASEMAPS = [
+  {
+    id: "satellite",
+    label: "🛰 Satellite HD",
+    style: "mapbox://styles/mapbox/satellite-streets-v12",
+    desc: "Mapbox High-Res Satellite + streets",
+  },
+  {
+    id: "dark",
+    label: "🌑 Dark Matter",
+    style: "mapbox://styles/mapbox/dark-v11",
+    desc: "Sleek dark canvas for high-contrast overlays",
+  },
+  {
+    id: "light",
+    label: "☀️ Light Canvas",
+    style: "mapbox://styles/mapbox/light-v11",
+    desc: "Clean light vector background",
+  },
+  {
+    id: "streets",
+    label: "🗺 Standard Streets",
+    style: "mapbox://styles/mapbox/streets-v12",
+    desc: "Full road, parcel, and building street map",
+  },
+  {
+    id: "topo",
+    label: "🏔 Outdoors / Topo",
+    style: "mapbox://styles/mapbox/outdoors-v12",
+    desc: "Topographic contours and natural terrain",
+  },
+  {
+    id: "esri",
+    label: "🌍 Esri World Imagery",
+    style: {
+      version: 8,
+      sources: {
+        "esri-world-imagery": {
+          type: "raster",
+          tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+          tileSize: 256,
+          maxzoom: 20,
+          attribution: "Esri, DigitalGlobe, USDA, USGS",
+        },
+      },
+      layers: [
+        { id: "esri-imagery-layer", type: "raster", source: "esri-world-imagery", minzoom: 0, maxzoom: 22 },
+      ],
+    },
+    desc: "Esri high-definition global imagery",
+  },
+];
+
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 const UPLOADED_IMG_SRC = "satquery-uploaded-image";
@@ -155,10 +209,13 @@ export default function MapView({
   const mapContainerRef = useRef(null);
   const mapRef          = useRef(null);
   const drawRef         = useRef(null);
-  const [mapReady, setMapReady] = useState(false);
-  const [tokenMissing, setTokenMissing] = useState(false);
+  const [mapReady, setMapReady]             = useState(false);
+  const [tokenMissing, setTokenMissing]     = useState(false);
   const [hasUploadOverlay, setHasUploadOverlay] = useState(false);
-  const [cursorCoords, setCursorCoords] = useState(null);
+  const [cursorCoords, setCursorCoords]     = useState(null);
+  const [activeBasemap, setActiveBasemap]   = useState("satellite");
+  const [basemapMenuOpen, setBasemapMenuOpen] = useState(false);
+  const [is3DTilted, setIs3DTilted]         = useState(false);
 
   // ── Initialise map ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -170,11 +227,16 @@ export default function MapView({
 
     mapboxgl.accessToken = token;
 
+    const initialBasemap = BASEMAPS[0];
+
     const map = new mapboxgl.Map({
-      container: mapContainerRef.current,
-      style:     "mapbox://styles/mapbox/satellite-streets-v12",
-      center:    [76.9, 26.9],
-      zoom:      10,
+      container:   mapContainerRef.current,
+      style:       initialBasemap.style,
+      center:      [76.9, 26.9],
+      zoom:        10,
+      maxZoom:     22,
+      pixelRatio:  Math.min(window.devicePixelRatio || 1, 2),  // High-DPI Retina support
+      preserveDrawingBuffer: true,    // enables canvas-to-PNG snapshot
     });
 
     const draw = new MapboxDraw({
@@ -370,9 +432,80 @@ export default function MapView({
   const baseToggles = ["water", "roads", "buildings", "vegetation"];
   const changeToggles = ["new_construction", "demolition", "vegetation_growth", "deforestation"];
 
+  // ── Basemap switcher handler ────────────────────────────────────────────
+  const handleBasemapChange = useCallback((bm) => {
+    if (!mapRef.current) return;
+    setActiveBasemap(bm.id);
+    setBasemapMenuOpen(false);
+    mapRef.current.setStyle(bm.style);
+    // Re-apply user overlays on next style load
+    mapRef.current.once("styledata", () => setMapReady(v => v)); // trigger overlay re-render
+  }, []);
+
+  // ── 3D Tilt toggle handler ─────────────────────────────────────────────
+  const toggle3DTilt = useCallback(() => {
+    if (!mapRef.current) return;
+    const nextTilt = !is3DTilted;
+    setIs3DTilted(nextTilt);
+    if (nextTilt) {
+      mapRef.current.easeTo({
+        pitch: 60,
+        bearing: -20,
+        duration: 1000,
+      });
+    } else {
+      mapRef.current.easeTo({
+        pitch: 0,
+        bearing: 0,
+        duration: 1000,
+      });
+    }
+  }, [is3DTilted]);
+
   return (
     <div className="map-area" role="application" aria-label="Satellite map">
       <div ref={mapContainerRef} style={{ width: "100%", height: "100%" }} />
+
+      {/* ── Top Map Controls: Basemap Switcher & 3D Tilt ───────────────── */}
+      <div className="map-top-controls">
+        <div className="basemap-switcher">
+          <button
+            id="basemap-toggle-btn"
+            className="basemap-switcher__btn"
+            onClick={() => setBasemapMenuOpen(v => !v)}
+            title="Switch basemap style"
+            aria-expanded={basemapMenuOpen}
+            aria-label="Switch basemap"
+          >
+            🗺 {BASEMAPS.find(b => b.id === activeBasemap)?.label || "Basemap"}
+          </button>
+          {basemapMenuOpen && (
+            <div className="basemap-switcher__menu">
+              {BASEMAPS.map((bm) => (
+                <button
+                  key={bm.id}
+                  id={`basemap-opt-${bm.id}`}
+                  className={`basemap-switcher__option${activeBasemap === bm.id ? " basemap-switcher__option--active" : ""}`}
+                  onClick={() => handleBasemapChange(bm)}
+                >
+                  <div className="basemap-switcher__opt-label">{bm.label}</div>
+                  <div className="basemap-switcher__opt-desc">{bm.desc}</div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <button
+          id="btn-3d-tilt"
+          className={`tilt-3d-btn${is3DTilted ? " tilt-3d-btn--active" : ""}`}
+          onClick={toggle3DTilt}
+          title={is3DTilted ? "Reset to 2D Top-Down View" : "Enable 3D Oblique Terrain Tilt"}
+          aria-pressed={is3DTilted}
+        >
+          {is3DTilted ? "📐 2D Top-Down" : "🏔 3D Tilt (60°)"}
+        </button>
+      </div>
 
       {/* Layer toggle panel */}
       <div className="map-overlay-panel">

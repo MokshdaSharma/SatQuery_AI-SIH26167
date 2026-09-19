@@ -67,6 +67,7 @@ export async function submitQuery({
   dateEnd,
   dateStart2,
   dateEnd2,
+  conversationHistory,
 }) {
   try {
     const { data } = await client.post("/api/query", {
@@ -78,6 +79,7 @@ export async function submitQuery({
       date_end: dateEnd || undefined,
       date_start_2: dateStart2 || undefined,
       date_end_2: dateEnd2 || undefined,
+      conversation_history: conversationHistory || undefined,
     });
     return data;
   } catch (err) {

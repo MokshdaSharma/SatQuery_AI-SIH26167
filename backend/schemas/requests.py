@@ -98,6 +98,10 @@ class QueryRequest(BaseModel):
         None,
         pattern=r"^\d{4}-\d{2}-\d{2}$",
     )
+    conversation_history: Optional[List[Dict[str, str]]] = Field(
+        default=None,
+        description="Optional list of prior chat turns: [{'query': str, 'answer': str}] for multi-turn context",
+    )
 
     @field_validator("modality")
     @classmethod

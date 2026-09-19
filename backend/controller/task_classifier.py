@@ -80,7 +80,7 @@ _CHANGE_RE   = _compile(_CHANGE_PATTERNS)
 _FUSION_RE   = _compile(_FUSION_PATTERNS)
 
 # ---------------------------------------------------------------------------
-# Result dataclass
+# Result dataclass & Entity Extraction
 # ---------------------------------------------------------------------------
 
 @dataclass
@@ -89,6 +89,105 @@ class TaskClassification:
     confidence: float               # classifier confidence 0-1
     matched_keywords: List[str]     # which patterns fired
     reasoning: str                  # human-readable explanation for execution trace
+
+
+# Known place names & common geo regions for entity matching
+_COMMON_LOCATIONS = [
+    "visakhapatnam", "vizag", "delhi", "new delhi", "mumbai", "bangalore", "bengaluru",
+    "hyderabad", "chennai", "kolkata", "jaipur", "pune", "ahmedabad", "surat",
+    "dubai", "cairo", "tokyo", "singapore", "london", "paris", "new york", "san francisco",
+    "austin", "lake mead", "amazon", "sahara", "ganga", "yamuna", "godavari", "nile"
+]
+
+_COMMON_OBJECTS = [
+    "building", "buildings", "structure", "structures", "house", "houses", "settlement",
+    "road", "roads", "highway", "highways", "bridge", "bridges", "runway", "airport",
+    "water", "water body", "reservoir", "lake", "river", "canal", "ocean", "coastline",
+    "vegetation", "forest", "tree", "trees", "crop", "cropland", "farmland", "canopy",
+    "solar farm", "solar panels", "industrial zone", "factory", "port", "harbor", "vessel"
+]
+
+_COMMON_CONDITIONS = [
+    "cloud", "clouds", "cloud cover", "cloudy", "heavy clouds", "overcast",
+    "flood", "flooding", "flooded", "inundation", "submerged",
+    "drought", "dry", "arid", "wet", "monsoon", "post-monsoon", "pre-monsoon",
+    "urban sprawl", "deforestation", "dense", "sparse", "high resolution", "all-weather"
+]
+
+
+def extract_query_entities(query: str) -> Dict[str, List[str]]:
+    """
+    Extract structured entities (locations, dates, objects, conditions) from user query.
+    """
+    text = query.strip()
+    lower_text = text.lower()
+    
+    locations = []
+    dates = []
+    objects = []
+    conditions = []
+
+    # 1. Locations: Predefined + geographic sectors + coordinate patterns
+    for loc in _COMMON_LOCATIONS:
+        if re.search(rf"\b{re.escape(loc)}\b", lower_text):
+            locations.append(loc.title())
+    
+    # Geographic directional sectors
+    for sector in ["northern", "southern", "eastern", "western", "central", "northeastern", "northwestern", "southeastern", "southwestern"]:
+        if re.search(rf"\b{sector}\s+(sector|quadrant|region|boundary|area|zone|district)\b", lower_text):
+            m = re.search(rf"\b{sector}\s+(?:sector|quadrant|region|boundary|area|zone|district)\b", lower_text)
+            if m:
+                locations.append(m.group(0).title())
+    
+    # Coordinate extraction (e.g. 26.9N, 76.9E or lat/lon pairs)
+    coord_match = re.findall(r"\b\d{1,3}(?:\.\d+)?\s*[°]?[NSns]?\s*,\s*\d{1,3}(?:\.\d+)?\s*[°]?[EWew]?\b", text)
+    if coord_match:
+        locations.extend(coord_match)
+
+    # 2. Dates & Temporal: Years, Date patterns, Relative periods
+    # Years: 1990-2030
+    years = re.findall(r"\b(19\d\d|20[0-3]\d)\b", text)
+    if years:
+        dates.extend([f"Year {y}" for y in sorted(list(set(years)))])
+    
+    # Date formats (YYYY-MM-DD or Month YYYY)
+    iso_dates = re.findall(r"\b\d{4}-\d{2}-\d{2}\b", text)
+    if iso_dates:
+        dates.extend(iso_dates)
+    
+    months = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december",
+              "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+    for m in months:
+        m_match = re.findall(rf"\b{m}\s+\d{{4}}\b", lower_text)
+        if m_match:
+            dates.extend([dm.title() for dm in m_match])
+    
+    # Temporal phrases
+    for t_phrase in ["before and after", "past 2 years", "last decade", "post-monsoon", "pre-event", "post-event", "recent"]:
+        if t_phrase in lower_text:
+            dates.append(t_phrase.title())
+
+    # 3. Objects / Land Cover
+    for obj in _COMMON_OBJECTS:
+        if re.search(rf"\b{re.escape(obj)}\b", lower_text):
+            obj_clean = obj.title()
+            if obj_clean not in objects:
+                objects.append(obj_clean)
+
+    # 4. Conditions
+    for cond in _COMMON_CONDITIONS:
+        if re.search(rf"\b{re.escape(cond)}\b", lower_text):
+            cond_clean = cond.title()
+            if cond_clean not in conditions:
+                conditions.append(cond_clean)
+
+    # De-duplicate while preserving order
+    return {
+        "locations": list(dict.fromkeys(locations)),
+        "dates": list(dict.fromkeys(dates)),
+        "objects": list(dict.fromkeys(objects)),
+        "conditions": list(dict.fromkeys(conditions)),
+    }
 
 
 # ---------------------------------------------------------------------------

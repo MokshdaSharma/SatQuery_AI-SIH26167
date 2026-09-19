@@ -24,13 +24,26 @@ const MODALITIES = [
   { value: "both",    label: "🔀 Both",    desc: "Fused analysis" },
 ];
 
+const QUERY_CATEGORIES = [
+  { id: "all", label: "All" },
+  { id: "urban", label: "🏢 Urban" },
+  { id: "water", label: "🌊 Water / Flood" },
+  { id: "eco", label: "🌿 Forestry" },
+  { id: "sar", label: "📡 SAR Radar" },
+  { id: "change", label: "🔄 Change" },
+];
+
 const QUERY_EXAMPLES = [
-  { icon: "🌿", label: "Land cover",    text: "Describe the land cover in this region." },
-  { icon: "🏢", label: "Find buildings", text: "Where are the buildings in this area?" },
-  { icon: "🪓", label: "Deforestation",  text: "Has there been any deforestation since 2022?" },
-  { icon: "🏗", label: "Urban change",   text: "How has the urban extent changed between the two dates?" },
-  { icon: "🌊", label: "Flood mapping",  text: "Detect flooded areas using SAR and optical data." },
-  { icon: "🌾", label: "Vegetation",     text: "What is the dominant vegetation type here?" },
+  { cat: "urban", icon: "🏢", label: "Building Footprints", text: "Where are the buildings and built-up structures in this area?" },
+  { cat: "urban", icon: "🛣", label: "Road Network", text: "Highlight the primary road network and transport corridors." },
+  { cat: "water", icon: "🌊", label: "Flood Mapping", text: "Detect flooded areas and standing water using SAR backscatter drop." },
+  { cat: "water", icon: "💧", label: "Water Reservoir", text: "Analyze the water body surface area and moisture levels using NDWI." },
+  { cat: "eco", icon: "🌿", label: "Land Cover Overview", text: "Describe the overall land cover and vegetation patterns in this scene." },
+  { cat: "eco", icon: "🪓", label: "Deforestation", text: "Has there been any vegetation loss or clearing in the northern sector?" },
+  { cat: "sar", icon: "☁️", label: "Cloud Penetration", text: "Analyze ground infrastructure under cloud cover using Sentinel-1 SAR." },
+  { cat: "sar", icon: "📡", label: "Radar Roughness", text: "Highlight areas with high double-bounce radar backscatter and metal towers." },
+  { cat: "change", icon: "🏗", label: "Urban Expansion", text: "How has the built-up area increased between the two observation dates?" },
+  { cat: "change", icon: "📊", label: "Percentage Shift", text: "Calculate percentage change in vegetation and built-up areas since 2022." },
 ];
 
 const HOW_IT_WORKS = [
@@ -51,6 +64,8 @@ export default function QueryPanel({
   uploadProgress,
   uploadError,
   onUploadClear,
+  conversationHistory = [],
+  onClearHistory,
   className = "",
 }) {
   const [query, setQuery]         = useState("");
@@ -60,7 +75,8 @@ export default function QueryPanel({
   const [dateStart2, setDateStart2] = useState("");
   const [dateEnd2, setDateEnd2]   = useState("");
   const [showSecondDate, setShowSecondDate] = useState(false);
-  const [exampleOpen, setExampleOpen] = useState(false);
+  const [exampleOpen, setExampleOpen] = useState(true);
+  const [selectedCategory, setSelectedCategory] = useState("all");
   const [inputMode, setInputMode] = useState("roi");
   const [guideOpen, setGuideOpen] = useState(false);
 
@@ -80,16 +96,20 @@ export default function QueryPanel({
       dateEnd2: dateEnd2 || undefined,
       imageRefs: uploadResult ? [uploadResult.image_id] : (dateStart2 ? [] : (imageryResult?.images?.map((img) => img.image_id) || [])),
       inputMode,
+      conversationHistory: conversationHistory.length > 0 ? conversationHistory : undefined,
     });
+    setQuery("");
   }
 
   function applyExample(text) {
     setQuery(text);
-    setExampleOpen(false);
     if (text.toLowerCase().includes("since") || text.toLowerCase().includes("change") ||
-        text.toLowerCase().includes("between")) {
+        text.toLowerCase().includes("between") || text.toLowerCase().includes("increased")) {
       setShowSecondDate(true);
       if (!dateStart2) setDateStart2("2023-01-01");
+    }
+    if (text.toLowerCase().includes("sar") || text.toLowerCase().includes("radar") || text.toLowerCase().includes("cloud")) {
+      setModality("both");
     }
   }
 
@@ -300,39 +320,96 @@ export default function QueryPanel({
           )}
         </div>
 
-        {/* ── Query ─────────────────────────────────────────────────────────────── */}
+        {/* ── Query & Conversation Thread ───────────────────────────────────── */}
         <div className="panel-section">
-          <div className="section-title"><span>💬</span> Step 3: Ask a Question</div>
-
-          {/* Example queries */}
-          <div style={{ marginBottom: 8 }}>
-            <button
-              type="button"
-              className="collapsible__trigger"
-              id="toggle-examples"
-              onClick={() => setExampleOpen(v => !v)}
-              aria-expanded={exampleOpen}
-            >
-              <span className={`collapsible__chevron${exampleOpen ? " open" : ""}`}>▶</span>
-              {exampleOpen ? "Hide example questions" : "✨ Show example questions"}
-            </button>
-            {exampleOpen && (
-              <div className="example-list" role="list">
-                {QUERY_EXAMPLES.map(({ icon, label, text }, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    id={`example-query-${i}`}
-                    className="example-chip"
-                    onClick={() => applyExample(text)}
-                    role="listitem"
-                  >
-                    <span className="example-chip__icon">{icon}</span>
-                    <span>{label}: {text}</span>
-                  </button>
-                ))}
-              </div>
+          <div className="card-header-flex" style={{ marginBottom: 8 }}>
+            <div className="section-title" style={{ marginBottom: 0 }}><span>💬</span> {conversationHistory.length > 0 ? "Follow-Up Query" : "Ask a Question"}</div>
+            {conversationHistory.length > 0 && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs"
+                onClick={onClearHistory}
+                title="Clear conversation history"
+                style={{ fontSize: 11, color: "var(--color-text-muted)" }}
+              >
+                🧹 Clear Chat
+              </button>
             )}
+          </div>
+
+          {/* Previous Conversation Turns Thread */}
+          {conversationHistory.length > 0 && (
+            <div className="conversation-thread" style={{ marginBottom: 12 }}>
+              {conversationHistory.map((item, idx) => (
+                <div key={idx} className="conversation-bubble-group">
+                  <div className="chat-bubble chat-bubble--user">
+                    <span className="chat-bubble__icon">👤</span>
+                    <span className="chat-bubble__text">{item.query}</span>
+                  </div>
+                  {item.answer && (
+                    <div className="chat-bubble chat-bubble--assistant">
+                      <span className="chat-bubble__icon">🛰️</span>
+                      <span className="chat-bubble__text">{item.answer.length > 120 ? item.answer.slice(0, 120) + "…" : item.answer}</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Quick suggestion chips */}
+          <div style={{ marginBottom: 12 }}>
+            <div className="quick-chips-header" style={{ fontSize: 11, color: "var(--color-text-muted)", marginBottom: 6, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
+              ⚡ Quick Query Suggestions
+            </div>
+            <div className="quick-query-chips-row" style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+              {[
+                { label: "Describe this scene", query: "Describe the overall land cover and terrain features in this scene." },
+                { label: "Find buildings", query: "Identify and highlight all major buildings and built-up structures." },
+                { label: "Find water bodies", query: "Detect water bodies, lakes, and moisture zones using NDWI." },
+                { label: "Identify vegetation", query: "Analyze vegetation health, canopy coverage, and agricultural vigour." },
+                { label: "Highlight roads", query: "Highlight the primary road network and transport corridors." },
+                { label: "Analyze urban area", query: "Identify the major built-up areas and impervious surfaces in this image." },
+              ].map((item, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  className="quick-chip-btn"
+                  onClick={() => applyExample(item.query)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="example-category-pills">
+              {QUERY_CATEGORIES.map((cat) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  className={`example-cat-btn${selectedCategory === cat.id ? " example-cat-btn--active" : ""}`}
+                  onClick={() => setSelectedCategory(cat.id)}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="example-list" role="list">
+              {QUERY_EXAMPLES.filter(q => selectedCategory === "all" || q.cat === selectedCategory).slice(0, 3).map(({ icon, label, text }, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  id={`example-query-${i}`}
+                  className="example-chip"
+                  onClick={() => applyExample(text)}
+                  role="listitem"
+                >
+                  <span className="example-chip__icon">{icon}</span>
+                  <span><strong>{label}:</strong> {text}</span>
+                </button>
+              ))}
+            </div>
           </div>
 
           <form onSubmit={handleSubmit}>
@@ -340,10 +417,11 @@ export default function QueryPanel({
               <textarea
                 id="query-input"
                 className="form-textarea form-textarea--query"
-                placeholder="e.g. Describe the land cover in this region… or Where are the buildings?"
+                placeholder={conversationHistory.length > 0 ? "Ask a follow-up question using context from previous answer…" : "e.g. Describe the land cover in this region… or Where are the buildings?"}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 aria-label="Analysis query"
+                rows={3}
               />
               {query.trim().length > 0 && query.trim().length < 3 && (
                 <div className="form-hint">Type at least 3 characters</div>
@@ -366,13 +444,15 @@ export default function QueryPanel({
               type="submit"
               className={`btn btn-primary${canSubmit && !isLoading ? " btn-primary--ready" : ""}`}
               disabled={!canSubmit}
-              style={{ gap: 8, padding: "11px 16px", fontSize: 13 }}
+              style={{ gap: 8, padding: "11px 16px", fontSize: 13, width: "100%" }}
             >
               {isLoading ? (
                 <>
                   <span className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} />
                   Analysing satellite data…
                 </>
+              ) : conversationHistory.length > 0 ? (
+                <>💬 Send Follow-Up Question</>
               ) : (
                 <>🔍 Run AI Analysis</>
               )}

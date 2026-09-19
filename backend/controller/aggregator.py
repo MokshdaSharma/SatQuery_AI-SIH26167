@@ -80,6 +80,23 @@ def aggregate(
     if all_change_types:
         change_types = list(dict.fromkeys(all_change_types))   # de-duplicate preserving order
 
+    # ── Entities extraction from query ────────────────────────────────────────
+    query_str = metadata.get("query", "")
+    try:
+        from .task_classifier import extract_query_entities
+    except ImportError:
+        from controller.task_classifier import extract_query_entities
+    entities = extract_query_entities(query_str) if query_str else None
+
+    # ── Change Analytics & Fusion Analytics ───────────────────────────────────
+    change_analytics = None
+    fusion_analytics = None
+    for o in model_outputs:
+        if o.get("change_analytics") is not None:
+            change_analytics = o["change_analytics"]
+        if o.get("fusion_analytics") is not None:
+            fusion_analytics = o["fusion_analytics"]
+
     # ── Execution trace ───────────────────────────────────────────────────────
     trace = _build_trace(task_type, classification_confidence, model_outputs, metadata)
 
@@ -103,6 +120,9 @@ def aggregate(
         "evidence_geojson": evidence_geojson,
         "segmentation_mask_url": seg_mask_url,
         "change_types": change_types,
+        "entities": entities,
+        "change_analytics": change_analytics,
+        "fusion_analytics": fusion_analytics,
         "execution_trace": trace,
         "warnings": warnings,
     }

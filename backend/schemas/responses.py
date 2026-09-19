@@ -45,6 +45,9 @@ class QueryResponse(BaseModel):
     evidence_geojson: Optional[Dict[str, Any]] = None   # GeoJSON FeatureCollection
     segmentation_mask_url: Optional[str] = None          # URL to PNG mask overlay
     change_types: Optional[List[str]] = None             # detected change categories
+    entities: Optional[Dict[str, List[str]]] = None      # extracted locations, dates, objects, conditions
+    change_analytics: Optional[Dict[str, Any]] = None    # change %, severity, timeline, trends
+    fusion_analytics: Optional[Dict[str, Any]] = None    # cross-modal consistency, sensor agreement, cloud penetration
     execution_trace: List[ExecutionStep] = Field(default_factory=list)
     warnings: List[str] = Field(default_factory=list)
 

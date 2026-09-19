@@ -246,18 +246,16 @@ Satellite imagery context:
                 "5. Any anomalies, notable boundaries, or points of interest\n"
                 "6. Overall scene classification (e.g., peri-urban, agricultural, forested, coastal)"
             )
-        else:
-            USER_PROMPT = (
-                f"{context_block}\n\n"
-                f"User question: {query}\n\n"
-                "Task: Analyze the satellite image and answer the question precisely.\n\n"
-                "Guidelines:\n"
-                "• Directly address the question with observations from the image.\n"
-                "• Support your answer with specific visual evidence (colours, patterns, textures).\n"
-                "• Incorporate spectral index values if relevant to the question.\n"
-                "• If the question involves a geographic feature, describe its location within the image.\n"
-                "• End with a confidence statement based on image clarity and available metadata."
-            )
+        history = metadata.get("conversation_history")
+        if history and isinstance(history, list) and len(history) > 0:
+            history_lines = ["\n--- Prior Conversation Turns ---"]
+            for turn in history[-3:]:
+                q_text = turn.get("query", "")
+                a_text = turn.get("answer", "")
+                if q_text:
+                    history_lines.append(f"User: {q_text}\nAssistant: {a_text[:200]}...")
+            history_block = "\n".join(history_lines) + "\n--------------------------------\n"
+            USER_PROMPT = f"{context_block}\n\n{history_block}\nFollow-up question: {query}\n\nTask: Using both prior context and the satellite image/metadata, answer the follow-up question precisely."
 
         # 1) Anthropic Claude Vision
         try:
