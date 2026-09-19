@@ -188,13 +188,17 @@ class ChangeVQAModel(SpecialistModel):
             direction = "more built-up ↑" if ndbi_delta > 0.05 else "less built-up ↓" if ndbi_delta < -0.05 else "stable →"
             delta_block += f"\n  - ΔNDBI: {ndbi_delta:+.3f} ({direction}) — built-up area change indicator"
 
-        context_block = f"""
-Bi-temporal satellite imagery change analysis context:
-- Sensor / Modality : {sensor} ({modality})
-- Epoch 1 (BEFORE)  : {date1}{f"  [cloud cover: {cloud1:.1f}%]" if cloud1 is not None else ""}
-- Epoch 2 (AFTER)   : {date2}{f"  [cloud cover: {cloud2:.1f}%]" if cloud2 is not None else ""}
-- ROI               : {roi_desc}{("\\nSpectral change indices (epoch2 − epoch1):" + delta_block) if delta_block else ""}
-""".strip()
+        cloud1_str = f"  [cloud cover: {cloud1:.1f}%]" if cloud1 is not None else ""
+        cloud2_str = f"  [cloud cover: {cloud2:.1f}%]" if cloud2 is not None else ""
+        spectral_suffix = ("\nSpectral change indices (epoch2 − epoch1):" + delta_block) if delta_block else ""
+
+        context_block = (
+            f"Bi-temporal satellite imagery change analysis context:\n"
+            f"- Sensor / Modality : {sensor} ({modality})\n"
+            f"- Epoch 1 (BEFORE)  : {date1}{cloud1_str}\n"
+            f"- Epoch 2 (AFTER)   : {date2}{cloud2_str}\n"
+            f"- ROI               : {roi_desc}{spectral_suffix}"
+        )
 
         # ── System prompt ────────────────────────────────────────────────────
         SYSTEM_PROMPT = (
