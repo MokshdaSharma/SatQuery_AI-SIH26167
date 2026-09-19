@@ -223,16 +223,6 @@ export default function ResultPanel({ result, isLoading, error, onExport, isExpo
           </div>
         )}
 
-        {/* ── Warnings ────────────────────────────────────────────────────────── */}
-        {result.warnings?.length > 0 && (
-          <div className="panel-section" style={{ paddingTop: 0 }}>
-            {result.warnings.map((w, i) => (
-              <div key={i} className="warning-banner" style={{ marginBottom: i < result.warnings.length - 1 ? 6 : 0 }}>
-                <span>⚠️</span><span>{w}</span>
-              </div>
-            ))}
-          </div>
-        )}
 
         {/* ── Evidence summary ─────────────────────────────────────────────────── */}
         {result.evidence_geojson && (

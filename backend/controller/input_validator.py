@@ -106,11 +106,8 @@ def validate_inputs(
 
     if n_images < min_img:
         if n_images == 0:
-            # No images provided — the router will fetch them; emit a warning only
-            warnings.append(
-                f"No image_refs provided for task '{task_type}'. "
-                "The router will attempt to fetch imagery automatically from GEE."
-            )
+            # No images provided — the router will fetch them automatically
+            pass
         else:
             raise InputValidationError(
                 f"Task '{task_type}' requires at least {min_img} image(s); "
