@@ -1,104 +1,86 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 
 export default function NavBar({
   activeTab,
   onSelectTab,
   backendOnline,
-  currentView, // "landing" or "workspace"
-  onToggleView,
   onOpenModelRegistry,
   onOpenDocs,
   onOpenSettings,
-  onOpenTrace
+  onOpenTrace,
 }) {
+  const [currentTime, setCurrentTime] = useState("");
+
+  // Live IST Clock
+  useEffect(() => {
+    const updateClock = () => {
+      const now = new Date();
+      const options = {
+        timeZone: "Asia/Kolkata",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      };
+      setCurrentTime(new Intl.DateTimeFormat("en-GB", options).format(now));
+    };
+
+    updateClock();
+    const interval = setInterval(updateClock, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   const TABS = [
-    { id: "studio", label: "01 — Earth Studio", icon: "🛰️" },
-    { id: "change", label: "02 — Temporal Change", icon: "🔄" },
-    { id: "fusion", label: "03 — Optical + SAR", icon: "📡" },
-    { id: "lab", label: "04 — Upload Lab", icon: "🧪" },
-    { id: "reports", label: "05 — Reports", icon: "📑" }
+    { id: "home", label: "Home", icon: "🏠" },
+    { id: "mapping", label: "Mapping", icon: "🌐" },
+    { id: "change", label: "Upload & Analysis", icon: "📤" },
+    { id: "logs", label: "Data Logs", icon: "🗄️" },
+    { id: "fusion", label: "Cross-Modal Fusion", icon: "📊" },
   ];
 
   return (
-    <header className="navbar-root">
-      {/* ── LEFT: Logo & Brand ────────────────────────────────────────── */}
-      <div className="navbar-brand-section" onClick={() => onToggleView("landing")}>
-        <div className="brand-logo-glow">
-          <span className="brand-logo-icon">🛰️</span>
-        </div>
-        <div className="brand-text-col">
-          <div className="brand-name-row">
-            <span className="brand-title">SatQuery AI</span>
-            <span className="brand-version-badge">v2.0</span>
-          </div>
-          <span className="brand-subtitle">Agentic Earth Intelligence</span>
+    <header className="navbar-root satquery-topbar">
+      {/* ── Center Tabs with Icons ─────────────────────────────────────── */}
+      <div className="topbar-left-section">
+        <div className="topbar-brand" onClick={() => onSelectTab("home")}>
+          <span className="brand-dot"></span>
+          <span className="brand-title-text">SatQuery AI</span>
         </div>
       </div>
 
-      {/* ── CENTER: Primary 5 Workspace Tabs ───────────────────────────── */}
-      <nav className="navbar-center-tabs">
+      <nav className="topbar-nav-tabs">
         {TABS.map((tab) => {
-          const isActive = currentView === "workspace" && activeTab === tab.id;
+          const isActive = activeTab === tab.id;
           return (
             <button
               key={tab.id}
-              className={`nav-tab-pill ${isActive ? "active" : ""}`}
-              onClick={() => {
-                if (currentView !== "workspace") onToggleView("workspace");
-                onSelectTab(tab.id);
-              }}
+              className={`topbar-nav-btn ${isActive ? "active" : ""}`}
+              onClick={() => onSelectTab(tab.id)}
             >
-              <span className="tab-icon">{tab.icon}</span>
-              <span className="tab-label">{tab.label}</span>
+              <span className="topbar-tab-icon">{tab.icon}</span>
+              <span className="topbar-tab-label">{tab.label}</span>
             </button>
           );
         })}
       </nav>
 
-      {/* ── RIGHT: Secondary Actions & AI Engine Status ────────────────── */}
-      <div className="navbar-right-section">
-        {/* AI Engine Status Indicator */}
+      {/* ── Right Status: Online Badge & Live IST Time ─────────────────── */}
+      <div className="topbar-right-section">
         <div
-          className="ai-engine-pill"
+          className={`status-pill ${backendOnline === false ? "status-pill--offline" : "status-pill--online"}`}
           onClick={onOpenModelRegistry}
-          title="Click to view AI Model Registry"
+          title="Click to inspect model status"
         >
-          <span className={`engine-dot ${backendOnline === false ? "offline" : "online"}`}></span>
-          <span className="engine-text">
-            {backendOnline === false ? "Backend Offline" : "AI Engine Online"}
+          <span className="status-indicator-dot"></span>
+          <span className="status-text">
+            {backendOnline === false ? "OFFLINE" : "ONLINE"}
           </span>
         </div>
 
-        {/* Action Buttons */}
-        <button className="nav-icon-btn" onClick={onOpenDocs} title="Documentation & User Guide">
-          📖 <span>Docs</span>
-        </button>
-
-        <button className="nav-icon-btn" onClick={onOpenModelRegistry} title="Model Status & Registry">
-          🤖 <span>Models</span>
-        </button>
-
-        <button className="nav-icon-btn" onClick={onOpenSettings} title="Settings & API Keys">
-          ⚙️ <span>Settings</span>
-        </button>
-
-        {/* View Toggle (Home / Workspace) */}
-        {currentView === "landing" ? (
-          <button
-            className="btn-launch-workspace"
-            onClick={() => onToggleView("workspace")}
-          >
-            <span>Launch Studio →</span>
-          </button>
-        ) : (
-          <button
-            className="btn-home-toggle"
-            onClick={() => onToggleView("landing")}
-            title="Return to Home Overview"
-          >
-            <span>🏠 Home</span>
-          </button>
-        )}
+        <div className="time-display-pill">
+          <span className="clock-icon">🕒</span>
+          <span className="time-text">{currentTime || "07:10:00"} IST</span>
+        </div>
       </div>
     </header>
   );

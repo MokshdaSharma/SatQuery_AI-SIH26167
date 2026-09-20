@@ -1,14 +1,16 @@
 /**
- * FusionLab.jsx — Tab 3: Optical + SAR Cross-Modal Fusion Lab.
+ * FusionLab.jsx — Tab: Cross-Modal Fusion / DSS
+ * Optical + SAR Cross-Modal Fusion Lab.
  *
  * Features:
  *   - Optical (Sentinel-2) vs SAR (Sentinel-1) side-by-side & split comparison
+ *   - ZERO hardcoded results: Metrics & radar signatures appear only after query execution
+ *   - Clean sensor placeholders (no random stock photos)
  *   - SAR-based detection under heavy cloud cover (all-weather radar penetration)
  *   - Flood & Standing Water detection via SAR specular backscatter drop
  *   - Built-up & Urban Infrastructure detection via SAR double-bounce backscatter
  *   - Cross-modal consistency score & calibrated agreement gauge
  *   - Sensor-specific highlight breakdown (Both Sensors vs Optical Only vs SAR Only)
- *   - Joint multimodal VQA query input
  */
 
 import { useState } from "react";
@@ -18,50 +20,20 @@ export default function FusionLab({
   isLoading,
   queryResult,
   error,
+  currentROI,
 }) {
   const [viewMode, setViewMode] = useState("side_by_side"); // "side_by_side" | "optical_only" | "sar_only"
   const [fusionQuery, setFusionQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
 
-  const fusionData = queryResult?.fusion_analytics || {
-    cross_modal_consistency: 89.6,
-    sensor_agreement: {
-      both_sensors: [
-        "High-Density Built Structures (Double-Bounce SAR + High NDBI)",
-        "Perennial Water Channels (Specular Low-Backscatter + High NDWI)",
-        "Paved Road Networks & Transport Corridors",
-      ],
-      optical_only: [
-        "Shallow Cropland Chlorophyll Variations (High NIR Reflectance)",
-        "Subtle Soil Moisture Tonal Differences",
-        "Rooftop Material & Solar Panel Reflectance",
-      ],
-      sar_only: [
-        "Structures & Landforms Penetrated Through Cloud/Haze Cover",
-        "Flooded / Inundated Ground Obscured by Vegetation Canopy",
-        "Metallic Infrastructure & High-Dielectric Corner Reflectors",
-      ],
-    },
-    cloud_penetration: {
-      transparency_pct: 96.5,
-      status: "All-Weather Penetration Active",
-      sensor_band: "Sentinel-1 C-Band (5.405 GHz) VV + VH",
-    },
-    flood_detection: {
-      backscatter_signature: "Specular Reflection (<-18.5 dB)",
-      water_inundation_confidence: 0.94,
-      status: "Verified Low-Scattering Boundary",
-    },
-    built_up_detection: {
-      backscatter_signature: "Strong Dihedral Double-Bounce (>-5.0 dB)",
-      urban_density_confidence: 0.92,
-      status: "Confirmed Solid Geometric Structures",
-    },
-  };
+  // STRICT RULE: No fake hardcoded analytics. Only use actual backend analytics when computed.
+  const fusionData = queryResult?.fusion_analytics || null;
 
   const handleExecuteQuery = (e) => {
     e?.preventDefault();
-    const q = fusionQuery.trim() || "Perform optical and SAR joint fusion analysis, identify cloud-obscured features and verify built-up structures";
+    const q =
+      fusionQuery.trim() ||
+      "Perform optical and SAR joint fusion analysis, identify cloud-obscured features and verify built-up structures";
     onRunFusionQuery?.({
       query: q,
       modality: "both",
@@ -69,13 +41,9 @@ export default function FusionLab({
     });
   };
 
-  // Sample Sentinel-2 Optical and Sentinel-1 SAR imagery representations
-  const opticalImg = "https://images.unsplash.com/photo-1509718443690-d8e2fb3474b7?auto=format&fit=crop&w=1000&q=80";
-  const sarImg = "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1000&q=80";
-
   return (
     <div className="fusion-lab-layout">
-      {/* Top Banner */}
+      {/* ── Top Header ────────────────────────────────────────────────────── */}
       <div className="fusion-header card">
         <div className="fusion-header__info">
           <div className="fusion-badge">📡 Dual-Sensor Synergy</div>
@@ -117,9 +85,9 @@ export default function FusionLab({
         </div>
       )}
 
-      {/* Main Content Grid */}
+      {/* ── Main Content Grid ─────────────────────────────────────────────── */}
       <div className="fusion-grid">
-        {/* Left: Dual Sensor Imagery Viewer */}
+        {/* Left: Dual Sensor Imagery Viewer (Clean Sensor Placeholders) */}
         <div className="fusion-viewer-card card">
           <div className="card-header-flex">
             <h3 className="section-title">🛰 Sensor Comparison & Alignment</h3>
@@ -132,7 +100,16 @@ export default function FusionLab({
                 <div className="fusion-pane__badge fusion-pane__badge--optical">
                   ☀️ Sentinel-2 Optical (RGB + NIR)
                 </div>
-                <img src={opticalImg} alt="Sentinel-2 Optical multispectral view" />
+                {/* Clean Dynamic Satellite Sensor Canvas Placeholder */}
+                <div className="sensor-raster-placeholder sensor-raster--optical">
+                  <div className="sensor-raster-grid"></div>
+                  <div className="sensor-raster-content">
+                    <span className="sensor-icon">🛰️</span>
+                    <div className="sensor-title">Sentinel-2 Multispectral (MSI)</div>
+                    <div className="sensor-meta">Bands: B4 (Red), B3 (Green), B2 (Blue), B8 (NIR)</div>
+                    <div className="sensor-coords">{currentROI ? "Active Polygon ROI Co-Registered" : "Coordinates: 17.6868° N, 83.2185° E"}</div>
+                  </div>
+                </div>
                 <div className="fusion-pane__caption">
                   High spectral sensitivity • Visible & Chlorophyll NIR • Subject to cloud cover
                 </div>
@@ -144,7 +121,16 @@ export default function FusionLab({
                 <div className="fusion-pane__badge fusion-pane__badge--sar">
                   📡 Sentinel-1 SAR (C-Band VV/VH)
                 </div>
-                <img src={sarImg} alt="Sentinel-1 SAR Radar view" />
+                {/* Clean Dynamic Radar Sensor Canvas Placeholder */}
+                <div className="sensor-raster-placeholder sensor-raster--sar">
+                  <div className="sensor-raster-grid radar-grid"></div>
+                  <div className="sensor-raster-content">
+                    <span className="sensor-icon">📡</span>
+                    <div className="sensor-title">Sentinel-1 C-Band SAR Radar</div>
+                    <div className="sensor-meta">Polarization: VV + VH | Frequency: 5.405 GHz</div>
+                    <div className="sensor-coords">{currentROI ? "Active Polygon ROI Co-Registered" : "Coordinates: 17.6868° N, 83.2185° E"}</div>
+                  </div>
+                </div>
                 <div className="fusion-pane__caption">
                   Microwave Penetration • Surface Roughness & Dihedral Bounce • All-Weather
                 </div>
@@ -152,181 +138,168 @@ export default function FusionLab({
             )}
           </div>
 
-          {/* Interactive Fusion Query Console */}
-          <div className="fusion-query-console">
-            <h4 className="fusion-query-title">💬 Multimodal Query & Joint VQA</h4>
-            <div className="fusion-query-input-row">
-              <input
-                type="text"
-                className="form-input"
-                placeholder="e.g., Identify ground structures under cloud cover using Sentinel-1 SAR"
-                value={fusionQuery}
-                onChange={(e) => setFusionQuery(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleExecuteQuery(e)}
-              />
-              <button
-                type="button"
-                className="btn btn--primary"
-                onClick={handleExecuteQuery}
-                disabled={isLoading}
-              >
-                {isLoading ? "Fusing…" : "⚡ Run Fusion VQA"}
-              </button>
-            </div>
-          </div>
+          {/* Fusion Query Bar */}
+          <form className="fusion-query-bar" onSubmit={handleExecuteQuery}>
+            <input
+              type="text"
+              className="form-input fusion-query-input"
+              placeholder="e.g. Detect urban expansion through clouds and verify standing water..."
+              value={fusionQuery}
+              onChange={(e) => setFusionQuery(e.target.value)}
+            />
+            <button
+              type="submit"
+              className="btn btn--primary fusion-submit-btn"
+              disabled={isLoading}
+            >
+              {isLoading ? "Fusing Sensors…" : "⚡ Run Cross-Modal Fusion"}
+            </button>
+          </form>
         </div>
 
-        {/* Right: Cross-Modal Analytics & Radar Physics Panels */}
+        {/* Right: Cross-Modal Intelligence Analytics (Only when computed) */}
         <div className="fusion-analytics-col">
-          {/* Consistency Score Card */}
-          <div className="card consistency-card">
-            <div className="consistency-header">
-              <div>
-                <div className="consistency-label">Cross-Modal Sensor Agreement</div>
-                <div className="consistency-sub">Spectral vs Radar structural correlation</div>
+          {!fusionData ? (
+            <div className="card empty-fusion-card" style={{ padding: "32px 24px", textAlign: "center" }}>
+              <div className="empty-state__icon">🔀</div>
+              <div className="empty-state__title" style={{ fontSize: 16, fontWeight: 700, marginTop: 8 }}>
+                Ready for Cross-Modal Fusion
               </div>
-              <div className="consistency-score-badge">
-                {fusionData.cross_modal_consistency}%
+              <div className="empty-state__desc" style={{ fontSize: 12.5, color: "var(--color-text-muted)", marginTop: 8, lineHeight: 1.6 }}>
+                Submit a joint query above to align Sentinel-2 Optical and Sentinel-1 SAR backscatter, calculate radar cloud penetration, and compute multi-sensor agreement.
               </div>
-            </div>
-            <div className="consistency-meter">
-              <div
-                className="consistency-meter-fill"
-                style={{ width: `${fusionData.cross_modal_consistency}%` }}
-              />
-            </div>
-          </div>
-
-          {/* Cloud Cover Penetration Card */}
-          <div className="card radar-feature-card">
-            <div className="card-header-flex">
-              <div className="radar-feature-title">
-                <span className="radar-feature-icon">☁️</span>
-                <span>SAR Cloud Cover Penetration</span>
-              </div>
-              <span className="badge badge--green">96.5% Transparency</span>
-            </div>
-            <p className="radar-feature-desc">
-              Sentinel-1 5.405 GHz microwave wavelength passes unattenuated through dense stratus clouds and atmospheric haze, mapping ground coordinates invisible to optical sensors.
-            </p>
-          </div>
-
-          {/* Flood / Water Inundation Detection via SAR */}
-          <div className="card radar-feature-card">
-            <div className="card-header-flex">
-              <div className="radar-feature-title">
-                <span className="radar-feature-icon">🌊</span>
-                <span>SAR Flood & Water Detection</span>
-              </div>
-              <span className="badge badge--blue">Specular Drop</span>
-            </div>
-            <div className="radar-metric-pill">
-              <span className="radar-metric-key">Radar Signature:</span>
-              <span className="radar-metric-val">{fusionData.flood_detection.backscatter_signature}</span>
-            </div>
-            <p className="radar-feature-desc">
-              Calm surface water reflects microwave radar pulses away from the antenna (specular reflection), creating pitch-black low-backscatter footprints ideal for rapid flood extent delineations.
-            </p>
-          </div>
-
-          {/* Built-Up Area Detection via SAR */}
-          <div className="card radar-feature-card">
-            <div className="card-header-flex">
-              <div className="radar-feature-title">
-                <span className="radar-feature-icon">🏢</span>
-                <span>SAR Built-Up & Urban Detection</span>
-              </div>
-              <span className="badge badge--orange">Double-Bounce</span>
-            </div>
-            <div className="radar-metric-pill">
-              <span className="radar-metric-key">Dihedral Signature:</span>
-              <span className="radar-metric-val">{fusionData.built_up_detection.backscatter_signature}</span>
-            </div>
-            <p className="radar-feature-desc">
-              Right-angle intersections between ground walls and concrete streets create strong double-bounce reflections, producing glowing high-intensity radar signatures for buildings.
-            </p>
-          </div>
-
-          {/* Cross-Modal Feature Attribution (Both vs Optical vs SAR) */}
-          <div className="card sensor-highlights-card">
-            <div className="card-header-flex">
-              <h3 className="section-title">🔍 Feature Attribution by Sensor</h3>
-              <div className="sensor-filter-pills">
+              <div style={{ marginTop: 20 }}>
                 <button
                   type="button"
-                  className={`filter-pill${activeFilter === "all" ? " filter-pill--active" : ""}`}
-                  onClick={() => setActiveFilter("all")}
+                  className="btn btn--primary btn-sm"
+                  onClick={handleExecuteQuery}
+                  disabled={isLoading}
                 >
-                  All
-                </button>
-                <button
-                  type="button"
-                  className={`filter-pill filter-pill--both${activeFilter === "both" ? " filter-pill--active" : ""}`}
-                  onClick={() => setActiveFilter("both")}
-                >
-                  Both (3)
-                </button>
-                <button
-                  type="button"
-                  className={`filter-pill filter-pill--opt${activeFilter === "optical" ? " filter-pill--active" : ""}`}
-                  onClick={() => setActiveFilter("optical")}
-                >
-                  Optical (3)
-                </button>
-                <button
-                  type="button"
-                  className={`filter-pill filter-pill--sar${activeFilter === "sar" ? " filter-pill--active" : ""}`}
-                  onClick={() => setActiveFilter("sar")}
-                >
-                  SAR (3)
+                  {isLoading ? "Processing Fusion…" : "⚡ Run Cross-Modal Fusion"}
                 </button>
               </div>
             </div>
-
-            <div className="sensor-highlight-lists">
-              {(activeFilter === "all" || activeFilter === "both") && (
-                <div className="sensor-group sensor-group--both">
-                  <div className="sensor-group__title">
-                    <span className="sensor-group__dot sensor-group__dot--both" />
-                    Detected by Both Sensors (Highest Confidence)
+          ) : (
+            <>
+              {/* Cross-Modal Agreement Score */}
+              <div className="card fusion-stat-card">
+                <div className="card-header-flex">
+                  <div>
+                    <div className="fusion-stat-label">Cross-Modal Sensor Agreement</div>
+                    <div className="fusion-stat-sub">Spectral vs Radar structural correlation</div>
                   </div>
-                  <ul className="sensor-list">
-                    {fusionData.sensor_agreement.both_sensors.map((item, idx) => (
-                      <li key={idx} className="sensor-list__item">{item}</li>
-                    ))}
-                  </ul>
+                  <div className="fusion-stat-number">{fusionData.cross_modal_consistency}%</div>
+                </div>
+                <div className="fusion-meter-bar">
+                  <div
+                    className="fusion-meter-fill"
+                    style={{ width: `${fusionData.cross_modal_consistency}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* SAR Cloud Penetration Capability */}
+              {fusionData.cloud_penetration && (
+                <div className="card fusion-feature-card">
+                  <div className="feature-card-header">
+                    <span className="feature-icon">☁️</span>
+                    <div>
+                      <div className="feature-title">SAR Cloud Cover Penetration</div>
+                      <div className="feature-sub">{fusionData.cloud_penetration.transparency_pct}% Transparency</div>
+                    </div>
+                  </div>
+                  <p className="feature-desc">
+                    Sentinel-1 5.405 GHz microwave wavelength passes unattenuated through dense stratus clouds and atmospheric haze, mapping ground coordinates invisible to optical sensors.
+                  </p>
                 </div>
               )}
 
-              {(activeFilter === "all" || activeFilter === "optical") && (
-                <div className="sensor-group sensor-group--optical">
-                  <div className="sensor-group__title">
-                    <span className="sensor-group__dot sensor-group__dot--optical" />
-                    Detected by Optical Only (Spectral / Color Signatures)
+              {/* SAR Flood & Water Inundation Detection */}
+              {fusionData.flood_detection && (
+                <div className="card fusion-feature-card">
+                  <div className="feature-card-header">
+                    <span className="feature-icon">🌊</span>
+                    <div>
+                      <div className="feature-title">SAR Flood & Water Detection</div>
+                      <div className="feature-sub">Specular Drop</div>
+                    </div>
                   </div>
-                  <ul className="sensor-list">
-                    {fusionData.sensor_agreement.optical_only.map((item, idx) => (
-                      <li key={idx} className="sensor-list__item">{item}</li>
-                    ))}
-                  </ul>
+                  <div className="radar-sig-badge">
+                    Radar Signature: <code>{fusionData.flood_detection.backscatter_signature}</code>
+                  </div>
+                  <p className="feature-desc">
+                    Calm surface water reflects microwave radar pulses away from the antenna (specular reflection), creating pitch-black low-backscatter footprints ideal for rapid flood extent delineations.
+                  </p>
                 </div>
               )}
 
-              {(activeFilter === "all" || activeFilter === "sar") && (
-                <div className="sensor-group sensor-group--sar">
-                  <div className="sensor-group__title">
-                    <span className="sensor-group__dot sensor-group__dot--sar" />
-                    Detected by SAR Only (Cloud Penetration & Radar Bounce)
+              {/* SAR Built-up & Structural Double-Bounce */}
+              {fusionData.built_up_detection && (
+                <div className="card fusion-feature-card">
+                  <div className="feature-card-header">
+                    <span className="feature-icon">🏢</span>
+                    <div>
+                      <div className="feature-title">SAR Built-Up Area Detection</div>
+                      <div className="feature-sub">Double-Bounce Return</div>
+                    </div>
                   </div>
-                  <ul className="sensor-list">
-                    {fusionData.sensor_agreement.sar_only.map((item, idx) => (
-                      <li key={idx} className="sensor-list__item">{item}</li>
-                    ))}
-                  </ul>
+                  <div className="radar-sig-badge">
+                    Radar Signature: <code>{fusionData.built_up_detection.backscatter_signature}</code>
+                  </div>
+                  <p className="feature-desc">
+                    Right-angle ground-to-wall geometries cause dihedral corner reflection, bouncing intense microwave energy directly back to the sensor for high-confidence structural detection.
+                  </p>
                 </div>
               )}
-            </div>
-          </div>
+
+              {/* Sensor-Specific Highlight Breakdown */}
+              {fusionData.sensor_agreement && (
+                <div className="card fusion-agreement-card">
+                  <div className="card-header-flex">
+                    <h3 className="section-title">🔍 Information Identified by Sensor</h3>
+                    <div className="filter-chips">
+                      {["all", "both", "optical", "sar"].map((f) => (
+                        <button
+                          key={f}
+                          type="button"
+                          className={`filter-pill ${activeFilter === f ? "filter-pill--active" : ""}`}
+                          onClick={() => setActiveFilter(f)}
+                        >
+                          {f.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="sensor-features-list">
+                    {(activeFilter === "all" || activeFilter === "both") &&
+                      fusionData.sensor_agreement.both_sensors?.map((item, idx) => (
+                        <div key={`b-${idx}`} className="sensor-feature-item sensor-feature-item--both">
+                          <span className="sensor-tag sensor-tag--both">🟣 Both Sensors</span>
+                          <span className="sensor-text">{item}</span>
+                        </div>
+                      ))}
+
+                    {(activeFilter === "all" || activeFilter === "optical") &&
+                      fusionData.sensor_agreement.optical_only?.map((item, idx) => (
+                        <div key={`o-${idx}`} className="sensor-feature-item sensor-feature-item--optical">
+                          <span className="sensor-tag sensor-tag--optical">☀️ Optical Only</span>
+                          <span className="sensor-text">{item}</span>
+                        </div>
+                      ))}
+
+                    {(activeFilter === "all" || activeFilter === "sar") &&
+                      fusionData.sensor_agreement.sar_only?.map((item, idx) => (
+                        <div key={`s-${idx}`} className="sensor-feature-item sensor-feature-item--sar">
+                          <span className="sensor-tag sensor-tag--sar">📡 SAR Only</span>
+                          <span className="sensor-text">{item}</span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
     </div>

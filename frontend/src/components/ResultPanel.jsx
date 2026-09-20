@@ -263,69 +263,53 @@ export default function ResultPanel({ result, isLoading, error, onExport, isExpo
           </div>
         </div>
 
-        {/* ── Detected Objects Grid ─────────────────────────────────────────── */}
-        <div className="panel-section" style={{ paddingTop: 0 }}>
-          <div className="section-title"><span>🏢</span> Detected Objects & Land-Cover</div>
-          <div className="detected-objects-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
-            <div className="object-count-card" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 8, padding: "8px 12px" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>🏢 Buildings</span>
-                <span style={{ fontSize: 14, fontWeight: 700, color: "#38bdf8" }}>
-                  {result.entities?.objects?.includes("Buildings") || result.evidence_geojson ? "42" : "18"}
-                </span>
-              </div>
-            </div>
-            <div className="object-count-card" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 8, padding: "8px 12px" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>🌊 Water Bodies</span>
-                <span style={{ fontSize: 14, fontWeight: 700, color: "#34d399" }}>3</span>
-              </div>
-            </div>
-            <div className="object-count-card" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 8, padding: "8px 12px" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>🛣️ Road Networks</span>
-                <span style={{ fontSize: 14, fontWeight: 700, color: "#fbbf24" }}>8</span>
-              </div>
-            </div>
-            <div className="object-count-card" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 8, padding: "8px 12px" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>🌿 Vegetation</span>
-                <span style={{ fontSize: 14, fontWeight: 700, color: "#a78bfa" }}>61%</span>
-              </div>
+        {/* ── Detected Objects & Land-Cover (Only if detected in result) ─── */}
+        {result.entities?.objects?.length > 0 && (
+          <div className="panel-section" style={{ paddingTop: 0 }}>
+            <div className="section-title"><span>🏢</span> Detected Features in Analysis</div>
+            <div className="detected-objects-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
+              {result.entities.objects.map((objName, i) => (
+                <div key={i} className="object-count-card" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 8, padding: "8px 12px" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>{objName}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "#38bdf8" }}>Detected ✓</span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-        </div>
+        )}
 
-        {/* ── Evidence Thumbnails ────────────────────────────────────────────── */}
-        <div className="panel-section" style={{ paddingTop: 0 }}>
-          <div className="section-title"><span>🔍</span> Grounded Evidence Crops</div>
-          <div className="evidence-thumbnails-row" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
-            {[
-              { label: "Building 01", icon: "🏢", tag: "Built-up" },
-              { label: "Water Basin", icon: "🌊", tag: "NDWI > 0.3" },
-              { label: "Canopy", icon: "🌲", tag: "NDVI 0.68" },
-            ].map((thumb, idx) => (
-              <div
-                key={idx}
-                className="evidence-thumb-card"
-                style={{
-                  background: "rgba(255,255,255,0.02)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  borderRadius: 6,
-                  padding: "8px 6px",
-                  textAlign: "center",
-                  cursor: "pointer",
-                  transition: "all 0.2s ease"
-                }}
-                title={`Click to highlight ${thumb.label} on map`}
-              >
-                <div style={{ fontSize: 20, marginBottom: 2 }}>{thumb.icon}</div>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-primary)" }}>{thumb.label}</div>
-                <div style={{ fontSize: 9.5, color: "var(--color-text-muted)" }}>{thumb.tag}</div>
-              </div>
-            ))}
+        {/* ── Evidence Features Grounded (Real GeoJSON Features) ─────────────── */}
+        {result.evidence_geojson?.features?.length > 0 && (
+          <div className="panel-section" style={{ paddingTop: 0 }}>
+            <div className="section-title"><span>🔍</span> Grounded Map Evidence</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {result.evidence_geojson.features.slice(0, 5).map((f, idx) => (
+                <div
+                  key={idx}
+                  className="evidence-thumb-card"
+                  style={{
+                    background: "rgba(56,189,248,0.04)",
+                    border: "1px solid rgba(56,189,248,0.15)",
+                    borderRadius: 6,
+                    padding: "8px 12px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)" }}>
+                    📍 Feature #{idx + 1}: {f.properties?.change_type || f.properties?.label || "Target Region"}
+                  </span>
+                  <span style={{ fontSize: 11, color: "var(--color-brand-primary)" }}>
+                    {f.properties?.area_sqm ? `${f.properties.area_sqm} m²` : "Grounded"}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* ── Quick Action Bar ────────────────────────────────────────────────── */}
         <div className="panel-section" style={{ paddingTop: 0 }}>

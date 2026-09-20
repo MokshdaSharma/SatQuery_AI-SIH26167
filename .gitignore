@@ -177,3 +177,5 @@ FINE_TUNING_REPORT.md
 .agents/
 .system_generated/
 *.tsbuildinfo
+
+scripts/
