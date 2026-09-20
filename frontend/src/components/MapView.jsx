@@ -30,7 +30,7 @@ import mapboxgl from "mapbox-gl";
 import MapboxDraw from "@mapbox/mapbox-gl-draw";
 import "mapbox-gl/dist/mapbox-gl.css";
 import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css";
-import { INDIA_STATES } from "../data/indiaGeoData";
+import { INDIA_STATES } from "./indiaGeoData";
 
 const BASEMAPS = [
   { id: "dark", label: "Dark", icon: "🌙", style: "mapbox://styles/mapbox/dark-v11" },
