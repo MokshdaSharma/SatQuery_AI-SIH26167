@@ -47,7 +47,7 @@ export default function FusionLab({
       <div className="fusion-header card">
         <div className="fusion-header__info">
           <div className="fusion-badge">📡 Dual-Sensor Synergy</div>
-          <h2 className="fusion-title">Optical + SAR Cross-Modal Fusion Lab</h2>
+          <h2 className="fusion-title">Cross-Modal Fusion Lab</h2>
           <p className="fusion-desc">
             Overcome cloud obscuration, resolve surface roughness, and isolate floodwaters by fusing Sentinel-2 Multispectral reflectance with Sentinel-1 C-Band Radar backscatter.
           </p>
@@ -100,16 +100,19 @@ export default function FusionLab({
                 <div className="fusion-pane__badge fusion-pane__badge--optical">
                   ☀️ Sentinel-2 Optical (RGB + NIR)
                 </div>
-                {/* Clean Dynamic Satellite Sensor Canvas Placeholder */}
-                <div className="sensor-raster-placeholder sensor-raster--optical">
-                  <div className="sensor-raster-grid"></div>
-                  <div className="sensor-raster-content">
-                    <span className="sensor-icon">🛰️</span>
-                    <div className="sensor-title">Sentinel-2 Multispectral (MSI)</div>
-                    <div className="sensor-meta">Bands: B4 (Red), B3 (Green), B2 (Blue), B8 (NIR)</div>
-                    <div className="sensor-coords">{currentROI ? "Active Polygon ROI Co-Registered" : "Coordinates: 17.6868° N, 83.2185° E"}</div>
+                {opticalUrl ? (
+                  <img src={opticalUrl} alt="Sentinel-2 Optical multispectral view" style={{ width: "100%", height: 240, objectFit: "cover", borderRadius: 8 }} />
+                ) : (
+                  <div className="sensor-raster-placeholder sensor-raster--optical">
+                    <div className="sensor-raster-grid"></div>
+                    <div className="sensor-raster-content">
+                      <span className="sensor-icon">🛰️</span>
+                      <div className="sensor-title">Sentinel-2 Multispectral (MSI)</div>
+                      <div className="sensor-meta">Bands: B4 (Red), B3 (Green), B2 (Blue), B8 (NIR)</div>
+                      <div className="sensor-coords">{currentROI ? "Active Polygon ROI Co-Registered" : "Coordinates: 17.6868° N, 83.2185° E"}</div>
+                    </div>
                   </div>
-                </div>
+                )}
                 <div className="fusion-pane__caption">
                   High spectral sensitivity • Visible & Chlorophyll NIR • Subject to cloud cover
                 </div>
@@ -121,16 +124,19 @@ export default function FusionLab({
                 <div className="fusion-pane__badge fusion-pane__badge--sar">
                   📡 Sentinel-1 SAR (C-Band VV/VH)
                 </div>
-                {/* Clean Dynamic Radar Sensor Canvas Placeholder */}
-                <div className="sensor-raster-placeholder sensor-raster--sar">
-                  <div className="sensor-raster-grid radar-grid"></div>
-                  <div className="sensor-raster-content">
-                    <span className="sensor-icon">📡</span>
-                    <div className="sensor-title">Sentinel-1 C-Band SAR Radar</div>
-                    <div className="sensor-meta">Polarization: VV + VH | Frequency: 5.405 GHz</div>
-                    <div className="sensor-coords">{currentROI ? "Active Polygon ROI Co-Registered" : "Coordinates: 17.6868° N, 83.2185° E"}</div>
+                {sarUrl ? (
+                  <img src={sarUrl} alt="Sentinel-1 SAR Radar view" style={{ width: "100%", height: 240, objectFit: "cover", borderRadius: 8 }} />
+                ) : (
+                  <div className="sensor-raster-placeholder sensor-raster--sar">
+                    <div className="sensor-raster-grid radar-grid"></div>
+                    <div className="sensor-raster-content">
+                      <span className="sensor-icon">📡</span>
+                      <div className="sensor-title">Sentinel-1 C-Band SAR Radar</div>
+                      <div className="sensor-meta">Polarization: VV + VH | Frequency: 5.405 GHz</div>
+                      <div className="sensor-coords">{currentROI ? "Active Polygon ROI Co-Registered" : "Coordinates: 17.6868° N, 83.2185° E"}</div>
+                    </div>
                   </div>
-                </div>
+                )}
                 <div className="fusion-pane__caption">
                   Microwave Penetration • Surface Roughness & Dihedral Bounce • All-Weather
                 </div>

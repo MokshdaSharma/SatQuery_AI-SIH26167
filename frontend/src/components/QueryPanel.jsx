@@ -123,36 +123,11 @@ export default function QueryPanel({
             <span className="panel-header__icon">🛰️</span>
             <span className="panel-header__title">Analysis Setup</span>
           </div>
-          <button
-            type="button"
-            className="guide-btn"
-            onClick={() => setGuideOpen(v => !v)}
-            aria-expanded={guideOpen}
-            aria-controls="guide-panel"
-          >
-            {guideOpen ? "✕ Close Guide" : "❓ How it works"}
-          </button>
         </div>
         <p className="panel-header__desc">
           Ask questions about any location on Earth using real satellite data.
         </p>
       </div>
-
-      {/* ── How it works guide ──────────────────────────────────────────────── */}
-      {guideOpen && (
-        <div className="guide-panel" id="guide-panel" role="region" aria-label="Quick start guide">
-          <div className="guide-panel__title">Quick Start Guide</div>
-          {HOW_IT_WORKS.map(({ step, icon, title, desc }) => (
-            <div key={step} className="guide-step">
-              <div className="guide-step__number">{step}</div>
-              <div>
-                <div className="guide-step__title">{icon} {title}</div>
-                <div className="guide-step__desc">{desc}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* ── Progress indicator ──────────────────────────────────────────────── */}
       {!guideOpen && (

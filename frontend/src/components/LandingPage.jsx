@@ -395,23 +395,13 @@ export default function LandingPage({ onLaunchWorkspace, onSelectTab }) {
 
       {/* ── FOOTER ───────────────────────────────────────────────────────── */}
       <footer className="landing-footer">
-        <div className="footer-container">
-          <div className="footer-left">
-            <div className="footer-brand">
+        <div className="footer-container" style={{ justifyContent: "center", textAlign: "center" }}>
+          <div className="footer-left" style={{ alignItems: "center" }}>
+            <div className="footer-brand" style={{ justifyContent: "center" }}>
               <span className="brand-icon">🛰️</span>
               <span className="brand-name">SatQuery AI</span>
             </div>
             <p className="footer-tagline">Agentic Vision-Language Intelligence for Earth Observation</p>
-          </div>
-          <div className="footer-links">
-            <button onClick={() => onSelectTab("studio")}>Earth Studio</button>
-            <button onClick={() => onSelectTab("change")}>Temporal Change</button>
-            <button onClick={() => onSelectTab("fusion")}>Optical + SAR</button>
-            <button onClick={() => onSelectTab("lab")}>Upload Lab</button>
-            <button onClick={() => onSelectTab("reports")}>Reports</button>
-          </div>
-          <div className="footer-copy">
-            © 2026 SatQuery AI • Smart Property & Geospatial Intelligence
           </div>
         </div>
       </footer>

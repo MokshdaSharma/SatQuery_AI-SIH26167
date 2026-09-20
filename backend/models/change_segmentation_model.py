@@ -66,8 +66,7 @@ class ChangeSegmentationModel(SpecialistModel):
             logger.info("[ChangeSegmentationModel] Loading from %s", HF_REPO)
             hf_token = os.environ.get("HF_TOKEN")
 
-            # ── Auto-detect weight filename ───────────────────────────────────
-            # Try candidate names in priority order; use the first one found.
+            # ── Auto-detect weight filename (local first, then HF hub) ─────────
             CANDIDATE_WEIGHTS = [
                 "change_segmentation_model.pt",
                 "model.pt",
@@ -75,37 +74,58 @@ class ChangeSegmentationModel(SpecialistModel):
                 "model.safetensors",
             ]
             weights_path = None
-            try:
-                available = list(list_repo_files(HF_REPO, token=hf_token))
-                logger.info("[ChangeSegmentationModel] Repo files: %s", available)
-                for candidate in CANDIDATE_WEIGHTS:
-                    if candidate in available:
-                        weights_path = hf_hub_download(
-                            repo_id=HF_REPO, filename=candidate, token=hf_token
-                        )
-                        logger.info("[ChangeSegmentationModel] Using weights file: %s", candidate)
-                        break
-            except Exception as list_err:
-                logger.warning("[ChangeSegmentationModel] Could not list repo files (%s), trying default.", list_err)
 
-            # Fallback: try downloading the default filename directly
+            # 1. Check local WEIGHTS_DIR first
+            for candidate in CANDIDATE_WEIGHTS:
+                local_f = WEIGHTS_DIR / candidate
+                if local_f.exists():
+                    weights_path = str(local_f)
+                    logger.info("[ChangeSegmentationModel] Using local weights: %s", weights_path)
+                    break
+
+            # 2. Check local config.json
+            if (WEIGHTS_DIR / "config.json").exists():
+                try:
+                    with open(WEIGHTS_DIR / "config.json") as f:
+                        self._model_config = json.load(f)
+                    logger.info("[ChangeSegmentationModel] Loaded local config: %s", self._model_config)
+                except Exception:
+                    pass
+
+            # 3. Fallback to HF hub if local weights not found
             if weights_path is None:
-                weights_path = hf_hub_download(
-                    repo_id=HF_REPO,
-                    filename=CANDIDATE_WEIGHTS[0],
-                    token=hf_token,
-                )
+                logger.info("[ChangeSegmentationModel] Local weights not found, querying HF: %s", HF_REPO)
+                try:
+                    available = list(list_repo_files(HF_REPO, token=hf_token))
+                    logger.info("[ChangeSegmentationModel] Repo files: %s", available)
+                    for candidate in CANDIDATE_WEIGHTS:
+                        if candidate in available:
+                            weights_path = hf_hub_download(
+                                repo_id=HF_REPO, filename=candidate, token=hf_token
+                            )
+                            logger.info("[ChangeSegmentationModel] Using downloaded weights file: %s", candidate)
+                            break
+                except Exception as list_err:
+                    logger.warning("[ChangeSegmentationModel] Could not list repo files (%s), trying default.", list_err)
 
-            # ── Download config (optional) ─────────────────────────────────────
-            try:
-                config_path = hf_hub_download(
-                    repo_id=HF_REPO, filename="config.json", token=hf_token
-                )
-                with open(config_path) as f:
-                    self._model_config = json.load(f)
-                logger.info("[ChangeSegmentationModel] Loaded config: %s", self._model_config)
-            except Exception:
-                self._model_config = {"classes": 5, "encoder_name": "resnet34"}
+                if weights_path is None:
+                    weights_path = hf_hub_download(
+                        repo_id=HF_REPO,
+                        filename=CANDIDATE_WEIGHTS[0],
+                        token=hf_token,
+                    )
+
+            # Download remote config if still not loaded
+            if not self._model_config:
+                try:
+                    config_path = hf_hub_download(
+                        repo_id=HF_REPO, filename="config.json", token=hf_token
+                    )
+                    with open(config_path) as f:
+                        self._model_config = json.load(f)
+                    logger.info("[ChangeSegmentationModel] Loaded HF config: %s", self._model_config)
+                except Exception:
+                    self._model_config = {"classes": 5, "encoder_name": "resnet34"}
 
             n_classes = self._model_config.get("classes", 5)
             encoder   = self._model_config.get("encoder_name", "resnet34")

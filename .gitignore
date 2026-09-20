@@ -3,7 +3,6 @@
 # ═══════════════════════════════════════════════════════════════════
 
 # ─── Secrets & credentials ──────────────────────────────────────────
-# GEE service account key (NEVER commit this)
 backend/satquery-ai-*.json
 satquery-ai-*.json
 *.json.key
@@ -24,7 +23,7 @@ frontend/.env.local
 frontend/.env.production
 *.env
 
-# ─── Datasets & Kaggle ─────────────────────────────────────────────
+# ─── Datasets & Local Data ─────────────────────────────────────────
 data/
 datasets/
 
@@ -75,10 +74,7 @@ dmypy.json
 .pyright/
 
 # ─── Jupyter notebooks ──────────────────────────────────────────────
-# Keep .ipynb if you want to track Kaggle notebook scripts; unblock selectively
 .ipynb_checkpoints/
-# Uncomment below to also ignore all notebooks:
-# *.ipynb
 
 # ─── Node / frontend ────────────────────────────────────────────────
 node_modules/
@@ -101,8 +97,9 @@ sessions/
 backend/sessions/
 exports/
 
-# ─── Model weights (large binary files — host on HuggingFace Hub) ───
+# ─── Model weights (large binary files — hosted on HuggingFace Hub) ───
 backend/models/weights/
+weights/
 *.pt
 *.pth
 *.ckpt
@@ -159,23 +156,13 @@ temp/
 *.bak
 *.orig
 *.cache
+.cache/
 scratch/
-
-# ─── Reference / internal docs (not for public repo) ───────────────
-ref_docs/
-
-# ─── Test & debug scripts ───────────────────────────────────────────
-# Keep scripts/ in git; ignore any temp test output files
 test_output/
 *.test.json
-
-test_layers.py
-FINE_TUNING_REPORT.md
 
 # ─── Agent & IDE metadata ──────────────────────────────────────────
 .gemini/
 .agents/
 .system_generated/
 *.tsbuildinfo
-
-scripts/

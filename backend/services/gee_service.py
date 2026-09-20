@@ -114,16 +114,19 @@ class GEEError(RuntimeError):
     """Raised when a GEE operation fails; message is safe to surface to the user."""
 
 
+from datetime import datetime, timedelta
+
 def fetch_imagery(
     roi_geojson: Dict[str, Any],
-    date_start: str,
-    date_end: str,
-    modality: str,
-    session_id: str,
+    date_start: Optional[str] = None,
+    date_end: Optional[str] = None,
+    modality: str = "optical",
+    session_id: Optional[str] = None,
     max_cloud_pct: float = 20.0,
 ) -> List[Dict[str, Any]]:
     """
     Fetch imagery for the ROI and return a list of image descriptor dicts.
+    Always retrieves the latest available satellite acquisitions when no date is specified.
 
     Each dict contains:
       { image_id, modality, date_acquired, preview_url, local_path, cloud_cover }
@@ -131,6 +134,19 @@ def fetch_imagery(
     Raises GEEError on unrecoverable failures (quota, no imagery, bad geometry).
     Returns mock data when GEE is unavailable.
     """
+    session_id = session_id or f"sess_{uuid.uuid4().hex[:8]}"
+
+    # Default to latest recent observation if dates not provided
+    if not date_end or date_end.strip() == "":
+        date_end = datetime.utcnow().strftime("%Y-%m-%d")
+    if not date_start or date_start.strip() == "":
+        # Look back 90 days from date_end to find the most recent cloud-free pass
+        try:
+            end_dt = datetime.strptime(date_end, "%Y-%m-%d")
+            date_start = (end_dt - timedelta(days=90)).strftime("%Y-%m-%d")
+        except Exception:
+            date_start = (datetime.utcnow() - timedelta(days=90)).strftime("%Y-%m-%d")
+
     gee_ok = _init_gee()
     if not gee_ok:
         return _mock_imagery(modality, date_start, session_id)
@@ -197,6 +213,7 @@ def _fetch_sentinel2(
             .filterBounds(roi)
             .filterDate(date_start, date_end)
             .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", max_cloud_pct))
+            .sort("system:time_start", False)  # Ensure latest acquisition is first
         )
         size = collection.size().getInfo()
     except Exception as exc:
@@ -213,7 +230,19 @@ def _fetch_sentinel2(
             "Try relaxing the cloud cover threshold or widening the date range."
         )
 
-    image = collection.median().clip(roi).select(["B4", "B3", "B2"])  # RGB
+    # Use the latest acquisition in the window
+    first_image = collection.first()
+    acquired_date = date_start
+    cloud_cover = None
+    try:
+        time_ms = first_image.get("system:time_start").getInfo()
+        if time_ms:
+            acquired_date = datetime.utcfromtimestamp(time_ms / 1000).strftime("%Y-%m-%d")
+        cloud_cover = first_image.get("CLOUDY_PIXEL_PERCENTAGE").getInfo()
+    except Exception:
+        pass
+
+    image = first_image.clip(roi).select(["B4", "B3", "B2"])  # RGB
 
     # Export thumbnail
     session_dir = _SESSIONS_DIR / session_id
@@ -245,10 +274,10 @@ def _fetch_sentinel2(
         {
             "image_id": image_id,
             "modality": "optical",
-            "date_acquired": date_start,
+            "date_acquired": acquired_date,
             "preview_url": preview_url,
             "local_path": tiff_path,
-            "cloud_cover": None,
+            "cloud_cover": cloud_cover,
         }
     ]
 
@@ -267,6 +296,7 @@ def _fetch_sentinel1(
             .filterDate(date_start, date_end)
             .filter(ee.Filter.eq("instrumentMode", "IW"))
             .select(["VV", "VH"])
+            .sort("system:time_start", False)  # Ensure latest acquisition is first
         )
         size = collection.size().getInfo()
     except Exception as exc:

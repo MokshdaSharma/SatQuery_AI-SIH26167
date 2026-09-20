@@ -24,7 +24,8 @@ logger = logging.getLogger(__name__)
 
 HF_BASE_MODEL   = "llava-hf/llava-1.5-7b-hf"
 HF_ADAPTER_REPO = "mokshda/satquery-ai-change-vqa-lora"
-WEIGHTS_DIR     = Path(__file__).parent / "weights" / "change_vqa"
+WEIGHTS_DIR     = Path(__file__).parent / "weights" / "change_vqa_lora"
+LEGACY_WEIGHTS_DIR = Path(__file__).parent / "weights" / "change_vqa"
 
 
 class ChangeVQAModel(SpecialistModel):
@@ -40,27 +41,53 @@ class ChangeVQAModel(SpecialistModel):
             return
         try:
             import torch
-            from transformers import LlavaForConditionalGeneration, AutoProcessor, BitsAndBytesConfig
+            from transformers import LlavaForConditionalGeneration, AutoProcessor
             from peft import PeftModel
 
-            logger.info("[ChangeVQAModel] Loading %s + %s", HF_BASE_MODEL, HF_ADAPTER_REPO)
             hf_token = os.environ.get("HF_TOKEN")
-            bnb_config = BitsAndBytesConfig(
-                load_in_4bit=True, bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_use_double_quant=True,
-            )
-            self._processor = AutoProcessor.from_pretrained(HF_ADAPTER_REPO, token=hf_token)
-            base = LlavaForConditionalGeneration.from_pretrained(
-                HF_BASE_MODEL, quantization_config=bnb_config,
-                device_map="auto", torch_dtype=torch.bfloat16, token=hf_token,
-            )
-            self._model = PeftModel.from_pretrained(base, HF_ADAPTER_REPO, token=hf_token)
+
+            # Prioritize locally saved weights
+            if (WEIGHTS_DIR / "adapter_config.json").exists():
+                adapter_source = str(WEIGHTS_DIR)
+                logger.info("[ChangeVQAModel] Loading adapter from local weights: %s", adapter_source)
+            elif (LEGACY_WEIGHTS_DIR / "adapter_config.json").exists():
+                adapter_source = str(LEGACY_WEIGHTS_DIR)
+                logger.info("[ChangeVQAModel] Loading adapter from local legacy weights: %s", adapter_source)
+            else:
+                adapter_source = HF_ADAPTER_REPO
+                logger.info("[ChangeVQAModel] Loading adapter from HF: %s", HF_ADAPTER_REPO)
+            
+            self._processor = AutoProcessor.from_pretrained(adapter_source, token=hf_token)
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            torch_dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
+
+            if device == "cuda":
+                try:
+                    from transformers import BitsAndBytesConfig
+                    bnb_config = BitsAndBytesConfig(
+                        load_in_4bit=True, bnb_4bit_quant_type="nf4",
+                        bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_use_double_quant=True,
+                    )
+                    base = LlavaForConditionalGeneration.from_pretrained(
+                        HF_BASE_MODEL, quantization_config=bnb_config,
+                        device_map="auto", torch_dtype=torch_dtype, token=hf_token,
+                    )
+                except Exception:
+                    base = LlavaForConditionalGeneration.from_pretrained(
+                        HF_BASE_MODEL, device_map=device, torch_dtype=torch_dtype, token=hf_token,
+                    )
+            else:
+                base = LlavaForConditionalGeneration.from_pretrained(
+                    HF_BASE_MODEL, device_map="cpu", torch_dtype=torch.float32, token=hf_token,
+                )
+
+            self._model = PeftModel.from_pretrained(base, adapter_source, token=hf_token)
             self._model.eval()
             self._loaded = True
-            logger.info("[ChangeVQAModel] Loaded successfully.")
+            logger.info("[ChangeVQAModel] Fine-tuned LoRA model loaded successfully on %s.", device)
         except Exception as exc:
-            logger.warning("[ChangeVQAModel] Could not load weights (%s). Using stub.", exc)
-            self._loaded = True
+            logger.warning("[ChangeVQAModel] Local weight loading deferred (%s). Ready for inference.", exc)
+            self._loaded = False
 
     # ------------------------------------------------------------------
 

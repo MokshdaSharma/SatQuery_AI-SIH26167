@@ -5771,3 +5771,183 @@ body::after {
   border-radius: 4px;
   display: inline-block;
 }
+
+/* ── Top Horizontal GIS Toolbox Bar (2-Row Layout) ────────────────────── */
+.gis-top-horizontal-toolbox-2row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 14px;
+  background: rgba(8, 16, 34, 0.95);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(56, 189, 248, 0.2);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.gis-tb-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.gis-tb-subgroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.gis-tb-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.gis-tb-btn-row {
+  display: flex;
+  gap: 4px;
+}
+
+.gis-tb-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.gis-tb-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fafc;
+}
+
+.gis-tb-btn.active {
+  background: #14b8a6;
+  border-color: #2dd4bf;
+  color: #042f2e;
+  font-weight: 700;
+}
+
+.gis-tb-divider {
+  width: 1px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.gis-tb-field-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.gis-tb-select {
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #f8fafc;
+  font-size: 11px;
+  outline: none;
+  cursor: pointer;
+  max-width: 180px;
+}
+
+.gis-tb-select:focus {
+  border-color: #38bdf8;
+}
+
+.gis-tb-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: rgba(56, 189, 248, 0.1);
+  color: #38bdf8;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.gis-tb-action-btn:hover {
+  background: rgba(56, 189, 248, 0.25);
+  border-color: #38bdf8;
+  color: #ffffff;
+}
+
+.gis-tb-action-btn.drawing-active {
+  background: #0f766e;
+  border-color: #14b8a6;
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(20, 184, 166, 0.5);
+}
+
+.gis-tb-action-btn.has-roi {
+  border-color: #34d399;
+  color: #34d399;
+}
+
+.gis-tb-action-btn--clear {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #ef4444;
+}
+
+.gis-tb-action-btn--clear:hover {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: #ef4444;
+  color: #ffffff;
+}
+
+.gis-tb-coords {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-family: 'JetBrains Mono', monospace;
+  color: #94a3b8;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.map-error-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 14, 30, 0.85);
+  z-index: 30;
+}
+
+.map-error-card {
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+  padding: 24px;
+  text-align: center;
+  max-width: 400px;
+}

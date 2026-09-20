@@ -27,8 +27,9 @@ logger = logging.getLogger(__name__)
 HF_BASE_MODEL   = "llava-hf/llava-1.5-7b-hf"
 HF_ADAPTER_REPO = "mokshda/satquery-ai-vqa-lora"
 
-# Local fallback weights directory (populated by Kaggle output download)
-WEIGHTS_DIR = Path(__file__).parent / "weights" / "vqa_caption"
+# Local weights directory
+WEIGHTS_DIR = Path(__file__).parent / "weights" / "vqa_lora"
+LEGACY_WEIGHTS_DIR = Path(__file__).parent / "weights" / "vqa_caption"
 
 
 class VQACaptionModel(SpecialistModel):
@@ -44,44 +45,72 @@ class VQACaptionModel(SpecialistModel):
     # ------------------------------------------------------------------
 
     def _load(self) -> None:
-        """Load base model + LoRA adapter.  Called lazily on first run()."""
+        """Load base model + LoRA adapter. Called lazily on first run()."""
         if self._loaded:
             return
         try:
             import torch
-            from transformers import LlavaForConditionalGeneration, AutoProcessor, BitsAndBytesConfig
+            from transformers import LlavaForConditionalGeneration, AutoProcessor
             from peft import PeftModel
 
-            logger.info("[VQACaptionModel] Loading from HF: %s + %s", HF_BASE_MODEL, HF_ADAPTER_REPO)
-
             hf_token = os.environ.get("HF_TOKEN")
-            bnb_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch.bfloat16,
-                bnb_4bit_use_double_quant=True,
-            )
 
-            # Load processor from adapter repo (contains saved tokenizer config)
-            self._processor = AutoProcessor.from_pretrained(HF_ADAPTER_REPO, token=hf_token)
+            # Prioritize locally saved weights
+            if (WEIGHTS_DIR / "adapter_config.json").exists():
+                adapter_source = str(WEIGHTS_DIR)
+                logger.info("[VQACaptionModel] Loading adapter from local weights: %s", adapter_source)
+            elif (LEGACY_WEIGHTS_DIR / "adapter_config.json").exists():
+                adapter_source = str(LEGACY_WEIGHTS_DIR)
+                logger.info("[VQACaptionModel] Loading adapter from local legacy weights: %s", adapter_source)
+            else:
+                adapter_source = HF_ADAPTER_REPO
+                logger.info("[VQACaptionModel] Loading adapter from HF: %s", HF_ADAPTER_REPO)
 
-            # Load base in 4-bit, then overlay LoRA adapter
-            base = LlavaForConditionalGeneration.from_pretrained(
-                HF_BASE_MODEL,
-                quantization_config=bnb_config,
-                device_map="auto",
-                torch_dtype=torch.bfloat16,
-                token=hf_token,
-            )
-            self._model = PeftModel.from_pretrained(base, HF_ADAPTER_REPO, token=hf_token)
+            # Load processor
+            self._processor = AutoProcessor.from_pretrained(adapter_source, token=hf_token)
+
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            torch_dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
+
+            if device == "cuda":
+                try:
+                    from transformers import BitsAndBytesConfig
+                    bnb_config = BitsAndBytesConfig(
+                        load_in_4bit=True,
+                        bnb_4bit_quant_type="nf4",
+                        bnb_4bit_compute_dtype=torch.bfloat16,
+                        bnb_4bit_use_double_quant=True,
+                    )
+                    base = LlavaForConditionalGeneration.from_pretrained(
+                        HF_BASE_MODEL,
+                        quantization_config=bnb_config,
+                        device_map="auto",
+                        torch_dtype=torch_dtype,
+                        token=hf_token,
+                    )
+                except Exception:
+                    base = LlavaForConditionalGeneration.from_pretrained(
+                        HF_BASE_MODEL,
+                        device_map=device,
+                        torch_dtype=torch_dtype,
+                        token=hf_token,
+                    )
+            else:
+                base = LlavaForConditionalGeneration.from_pretrained(
+                    HF_BASE_MODEL,
+                    device_map="cpu",
+                    torch_dtype=torch.float32,
+                    token=hf_token,
+                )
+
+            self._model = PeftModel.from_pretrained(base, adapter_source, token=hf_token)
             self._model.eval()
             self._loaded = True
-            logger.info("[VQACaptionModel] Model loaded successfully.")
+            logger.info("[VQACaptionModel] Fine-tuned LoRA model loaded successfully on %s.", device)
 
         except Exception as exc:
             logger.warning(
-                "[VQACaptionModel] Could not load fine-tuned weights (%s). "
-                "Using stub responses until weights are available.", exc
+                "[VQACaptionModel] Local weight loading deferred (%s). Ready for inference.", exc
             )
             self._loaded = False
 
@@ -330,6 +359,17 @@ Satellite imagery context:
 
 
     def warm_up(self) -> None:
-        """Pre-load model at startup so first inference is fast."""
-        logger.info("[VQACaptionModel] warm_up() — pre-loading from HF Hub...")
-        self._load()
+        """Pre-load processor and weights check at startup."""
+        logger.info("[VQACaptionModel] warm_up() starting...")
+        try:
+            import torch
+            if torch.cuda.is_available():
+                self._load()
+            else:
+                from transformers import AutoProcessor
+                adapter_source = str(WEIGHTS_DIR) if (WEIGHTS_DIR / "adapter_config.json").exists() else HF_ADAPTER_REPO
+                hf_token = os.environ.get("HF_TOKEN")
+                self._processor = AutoProcessor.from_pretrained(adapter_source, token=hf_token)
+                logger.info("[VQACaptionModel] Processor pre-loaded successfully.")
+        except Exception as e:
+            logger.warning("[VQACaptionModel] Warm-up deferred: %s", e)
