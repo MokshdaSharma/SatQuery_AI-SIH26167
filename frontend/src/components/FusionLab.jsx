@@ -21,10 +21,23 @@ export default function FusionLab({
   queryResult,
   error,
   currentROI,
+  opticalUrl: propOpticalUrl = null,
+  sarUrl: propSarUrl = null,
 }) {
   const [viewMode, setViewMode] = useState("side_by_side"); // "side_by_side" | "optical_only" | "sar_only"
   const [fusionQuery, setFusionQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
+
+  const opticalUrl =
+    propOpticalUrl ||
+    queryResult?.optical_url ||
+    queryResult?.images?.find((img) => img.modality === "optical" || img.type === "optical")?.url ||
+    null;
+  const sarUrl =
+    propSarUrl ||
+    queryResult?.sar_url ||
+    queryResult?.images?.find((img) => img.modality === "sar" || img.type === "sar")?.url ||
+    null;
 
   // STRICT RULE: No fake hardcoded analytics. Only use actual backend analytics when computed.
   const fusionData = queryResult?.fusion_analytics || null;

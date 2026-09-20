@@ -16,7 +16,7 @@ import MapView from "./components/MapView";
 import QueryPanel from "./components/QueryPanel";
 import ResultPanel from "./components/ResultPanel";
 import ChangeStudio from "./components/ChangeStudio";
-import FusionLab from "./components/FusionLab";
+import UploadAnalysisStudio from "./components/UploadAnalysisStudio";
 import DataLogsView from "./components/DataLogsView";
 import ModelRegistryModal from "./components/ModelRegistryModal";
 import AgentExecutionDrawer from "./components/AgentExecutionDrawer";
@@ -105,80 +105,73 @@ function AppInner() {
 
   // ── ROI change ─────────────────────────────────────────────────────────────
   const handleROIChange = useCallback(
-    (geom) => {
+    async (geom) => {
       setRoi(geom);
       setQueryResult(null);
       setExportResult(null);
       setError(null);
-      setLayerData({});
-      setLayerVisibility(INITIAL_LAYER_VISIBILITY);
       if (geom) {
         addToast({
           type: "success",
           title: "Region drawn",
-          message: "Polygon ROI is ready for analysis.",
+          message: "Polygon ROI active. Synchronizing OSM layers...",
           duration: 3000,
         });
-      }
-    },
-    [addToast]
-  );
 
-  // ── Upload Handlers ────────────────────────────────────────────────────────
-  const handleUploadFile = useCallback(
-    async (file) => {
-      setIsUploading(true);
-      setUploadProgress(0);
-      setUploadError(null);
-      setUploadResult(null);
-      setQueryResult(null);
-      setExportResult(null);
-      setError(null);
-      try {
-        const result = await uploadImage(file, setUploadProgress);
-        setUploadResult(result);
-        addToast({
-          type: "success",
-          title: "Image uploaded",
-          message: `${result.filename} ready for analysis.`,
-          duration: 4000,
+        // Re-fetch any currently active OSM layers for the new ROI
+        const geeLayerNames = ["water", "roads", "buildings", "vegetation"];
+        setLayerVisibility((currentVisibility) => {
+          for (const name of geeLayerNames) {
+            if (currentVisibility[name]) {
+              fetchLayer(name, geom)
+                .then((data) => {
+                  setLayerData((prev) => ({ ...prev, [name]: data }));
+                })
+                .catch((err) => {
+                  console.warn(`Layer re-fetch failed for ${name}:`, err.message);
+                });
+            }
+          }
+          return currentVisibility;
         });
-      } catch (err) {
-        setUploadError(err.message || "Upload failed.");
-        addToast({ type: "error", title: "Upload failed", message: err.message, duration: 6000 });
-      } finally {
-        setIsUploading(false);
       }
     },
     [addToast]
   );
-
-  const handleUploadClear = useCallback(() => {
-    setUploadResult(null);
-    setUploadError(null);
-    setUploadProgress(0);
-    setQueryResult(null);
-    setExportResult(null);
-    setError(null);
-  }, []);
 
   // ── Layer toggle ───────────────────────────────────────────────────────────
   const handleLayerToggle = useCallback(
     async (name) => {
-      const newVisible = !layerVisibility[name];
-      setLayerVisibility((prev) => ({ ...prev, [name]: newVisible }));
-      if (!newVisible) return;
-      const geeLayerNames = ["water", "roads", "buildings", "vegetation"];
-      if (geeLayerNames.includes(name) && !layerData[name] && roi) {
-        try {
-          const data = await fetchLayer(name, roi);
-          setLayerData((prev) => ({ ...prev, [name]: data }));
-        } catch (err) {
-          console.warn(`Layer fetch failed for ${name}:`, err.message);
+      setLayerVisibility((prev) => {
+        const newVisible = !prev[name];
+        if (newVisible) {
+          const geeLayerNames = ["water", "roads", "buildings", "vegetation"];
+          if (geeLayerNames.includes(name)) {
+            const targetROI = roi || {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [80.4, 15.8],
+                  [80.6, 15.8],
+                  [80.6, 16.0],
+                  [80.4, 16.0],
+                  [80.4, 15.8],
+                ],
+              ],
+            };
+            fetchLayer(name, targetROI)
+              .then((data) => {
+                setLayerData((dPrev) => ({ ...dPrev, [name]: data }));
+              })
+              .catch((err) => {
+                console.warn(`Layer fetch failed for ${name}:`, err.message);
+              });
+          }
         }
-      }
+        return { ...prev, [name]: newVisible };
+      });
     },
-    [layerVisibility, layerData, roi]
+    [roi]
   );
 
   // ── Query Submit handler (ZERO fake results, strictly runs real API) ───────
@@ -221,12 +214,31 @@ function AppInner() {
           }
         }
 
+        // Standardize fallback ROI geometry for uploaded images or point ROIs
+        let queryROI = roi || params.roiGeojson;
+        if (!queryROI || queryROI.type === "Point") {
+          queryROI = {
+            type: "Polygon",
+            coordinates: [
+              [
+                [75.7, 26.8],
+                [75.9, 26.8],
+                [75.9, 27.0],
+                [75.7, 27.0],
+                [75.7, 26.8],
+              ],
+            ],
+          };
+        }
+
+        const dateStartClean = params.dateStart || new Date().toISOString().split("T")[0];
+
         const result = await submitQuery({
-          roiGeojson: roi || { type: "Point", coordinates: [0, 0] },
+          roiGeojson: queryROI,
           query: params.query,
-          imageRefs: params.imageRefs,
-          modality: params.modality,
-          dateStart: params.dateStart,
+          imageRefs: params.imageRefs || (uploadResult ? [uploadResult.image_id] : []),
+          modality: params.modality || "optical",
+          dateStart: dateStartClean,
           dateEnd: params.dateEnd,
           dateStart2: params.dateStart2,
           dateEnd2: params.dateEnd2,
@@ -297,6 +309,28 @@ function AppInner() {
           dateStart2: params.dateStart2 || "2024-03-20",
         });
         setQueryResult(result);
+        if (result.change_types?.length > 0) {
+          const updates = {};
+          result.change_types.forEach((ct) => {
+            updates[ct] = true;
+          });
+          setLayerVisibility((prev) => ({ ...prev, ...updates }));
+          if (result.evidence_geojson) {
+            const byType = {};
+            result.evidence_geojson.features?.forEach((f) => {
+              const ct = f.properties?.change_type;
+              if (ct) {
+                byType[ct] = byType[ct] || { type: "FeatureCollection", features: [] };
+                byType[ct].features.push(f);
+              }
+            });
+            const layerUpdates = {};
+            Object.entries(byType).forEach(([ct, geojson]) => {
+              layerUpdates[ct] = { layer_name: ct, geojson, tile_url: null };
+            });
+            setLayerData((prev) => ({ ...prev, ...layerUpdates }));
+          }
+        }
         addToast({
           type: "success",
           title: "Dynamics computed",
@@ -311,6 +345,74 @@ function AppInner() {
       }
     },
     [roi, addToast]
+  );
+
+  // ── Upload handlers ────────────────────────────────────────────────────────
+  const handleUploadFile = useCallback(
+    async (file) => {
+      setIsUploading(true);
+      setUploadProgress(0);
+      setUploadError(null);
+      try {
+        const result = await uploadImage(file, (progress) => {
+          setUploadProgress(progress);
+        });
+        setUploadResult(result);
+        addToast({
+          type: "success",
+          title: "Image Uploaded",
+          message: `${result.filename || "Image"} uploaded and processed successfully.`,
+          duration: 4000,
+        });
+      } catch (err) {
+        setUploadError(err.message || "Failed to upload image.");
+        addToast({
+          type: "error",
+          title: "Upload Failed",
+          message: err.message || "Failed to upload image.",
+          duration: 6000,
+        });
+      } finally {
+        setIsUploading(false);
+      }
+    },
+    [addToast]
+  );
+
+  const handleUploadClear = useCallback(() => {
+    setUploadResult(null);
+    setUploadProgress(0);
+    setUploadError(null);
+  }, []);
+
+  const handleMapUploadedImage = useCallback(
+    (upload) => {
+      if (!upload) return;
+      setActiveTab("mapping");
+      if (upload.geo_bounds && Array.isArray(upload.geo_bounds) && upload.geo_bounds.length === 4) {
+        const [w, s, e, n] = upload.geo_bounds;
+        const poly = {
+          type: "Polygon",
+          coordinates: [
+            [
+              [w, s],
+              [e, s],
+              [e, n],
+              [w, n],
+              [w, s],
+            ],
+          ],
+        };
+        setRoi(poly);
+      }
+      addToast({
+        type: "success",
+        title: "Raster Mapped",
+        message: `Overlaying ${upload.filename || "satellite image"} onto interactive map canvas.`,
+        duration: 4000,
+      });
+    },
+    [addToast]
   );
 
   // ── Export handlers ────────────────────────────────────────────────────────
@@ -429,6 +531,7 @@ function AppInner() {
 
               {/* Center MapView (with Layers Card, 2D/3D Tilt, State/District Dropdowns & AOI Card) */}
               <MapView
+                roi={roi}
                 onROIChange={handleROIChange}
                 evidenceGeojson={queryResult?.evidence_geojson}
                 layerVisibility={layerVisibility}
@@ -451,15 +554,23 @@ function AppInner() {
             </div>
           )}
 
-          {/* 03 — UPLOAD & ANALYSIS (Bi-Temporal Change & Trajectory Studio) */}
+          {/* 03 — UPLOAD & ANALYSIS (File Upload & Analysis Studio) */}
           {activeTab === "change" && (
             <div className="tab-content tab-content--change">
-              <ChangeStudio
-                onRunChangeAnalysis={handleStudioSubmit}
+              <UploadAnalysisStudio
+                uploadResult={uploadResult}
+                isUploading={isUploading}
+                uploadProgress={uploadProgress}
+                uploadError={uploadError}
+                onUploadFile={handleUploadFile}
+                onUploadClear={handleUploadClear}
+                onRunAnalysis={handleSubmit}
+                onMapImage={handleMapUploadedImage}
                 isLoading={isLoading}
                 queryResult={queryResult}
                 error={error}
-                currentROI={roi}
+                onExport={handleExport}
+                isExporting={isExporting}
               />
             </div>
           )}
@@ -473,19 +584,6 @@ function AppInner() {
                 onOpenTrace={() => setIsTraceOpen(true)}
                 onExport={handleExport}
                 isExporting={isExporting}
-              />
-            </div>
-          )}
-
-          {/* 05 — CROSS-MODAL FUSION / DSS */}
-          {activeTab === "fusion" && (
-            <div className="tab-content tab-content--fusion">
-              <FusionLab
-                onRunFusionQuery={handleStudioSubmit}
-                isLoading={isLoading}
-                queryResult={queryResult}
-                error={error}
-                currentROI={roi}
               />
             </div>
           )}

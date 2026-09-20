@@ -220,96 +220,58 @@ export default function LandingPage({ onLaunchWorkspace, onSelectTab }) {
 
         <div className="capabilities-grid-cards">
           {/* Card 1: Earth Studio & VQA */}
-          <div className="capability-card" onClick={() => onSelectTab("studio")}>
+          <div className="capability-card" onClick={() => onSelectTab("mapping")}>
             <div className="cap-icon-box">🛰️</div>
             <div className="cap-number">01</div>
-            <h3>Earth Studio & VQA</h3>
+            <h3>Earth Studio & GIS Mapping</h3>
             <p>
-              Ask any natural language question about an area or uploaded image. Auto-extracts entities, detects objects, and visually grounds evidence.
+              Interactive GIS mapping canvas with Area of Interest (AOI) selection, layer overlays (Water, Roads, Buildings, Vegetation), and on-demand VLM querying.
             </p>
             <ul className="cap-features-list">
               <li>Visual Question Answering (VQA)</li>
               <li>Bounding Box & Polygon Grounding</li>
+              <li>Interactive Thematic Map Layers</li>
+            </ul>
+            <div className="cap-card-footer">
+              <span>Open Mapping Studio</span>
+              <span className="arrow">→</span>
+            </div>
+          </div>
+
+          {/* Card 2: Upload & Satellite Vision Studio */}
+          <div className="capability-card" onClick={() => onSelectTab("change")}>
+            <div className="cap-icon-box">📤</div>
+            <div className="cap-number">02</div>
+            <h3>Upload & Analysis Studio</h3>
+            <p>
+              Upload GeoTIFFs, Sentinel/Landsat rasters, and drone imagery for instant spatial attribute inspection, spectral index analysis, and on-map raster overlay.
+            </p>
+            <ul className="cap-features-list">
+              <li>GeoTIFF Georeferencing & Map Overlay</li>
+              <li>Bi-Temporal Before/After Change Slider</li>
+              <li>On-Demand Vision AI Analysis</li>
+            </ul>
+            <div className="cap-card-footer">
+              <span>Open Upload & Analysis</span>
+              <span className="arrow">→</span>
+            </div>
+          </div>
+
+          {/* Card 3: Data Logs & Verifiable Traces */}
+          <div className="capability-card" onClick={() => onSelectTab("logs")}>
+            <div className="cap-icon-box">🗄️</div>
+            <div className="cap-number">03</div>
+            <h3>Data Logs & Audit Traces</h3>
+            <p>
+              Comprehensive execution traces, agentic dispatch steps, model confidence scores, conversation memory, and downloadable GeoJSON/PDF exports.
+            </p>
+            <ul className="cap-features-list">
+              <li>Verifiable Model Execution Traces</li>
+              <li>Downloadable PDF & GeoJSON Exports</li>
               <li>Multi-Turn Conversational Memory</li>
             </ul>
             <div className="cap-card-footer">
-              <span>Open Earth Studio</span>
-              <span className="arrow">→</span>
-            </div>
-          </div>
-
-          {/* Card 2: Temporal Change Studio */}
-          <div className="capability-card" onClick={() => onSelectTab("change")}>
-            <div className="cap-icon-box">🔄</div>
-            <div className="cap-number">02</div>
-            <h3>Temporal Change Studio</h3>
-            <p>
-              Bi-temporal image comparison with swipe/opacity sliders, automated change %, severity estimation, milestone timelines, and trend charts.
-            </p>
-            <ul className="cap-features-list">
-              <li>Interactive Before/After Slider</li>
-              <li>Severity Estimation (0-100 Gauge)</li>
-              <li>Multitemporal Sequence & Trend Line</li>
-            </ul>
-            <div className="cap-card-footer">
-              <span>Explore Change Studio</span>
-              <span className="arrow">→</span>
-            </div>
-          </div>
-
-          {/* Card 3: Optical + SAR Fusion */}
-          <div className="capability-card" onClick={() => onSelectTab("fusion")}>
-            <div className="cap-icon-box">📡</div>
-            <div className="cap-number">03</div>
-            <h3>Optical + SAR Radar Fusion</h3>
-            <p>
-              Simultaneous cross-modal verification combining Sentinel-2 optical spectral bands with Sentinel-1 SAR C-band microwave backscatter.
-            </p>
-            <ul className="cap-features-list">
-              <li>All-Weather Cloud Penetration</li>
-              <li>SAR Flood / Water Specular Isolation</li>
-              <li>Double-Bounce Built-Up Confirmation</li>
-            </ul>
-            <div className="cap-card-footer">
-              <span>Open Fusion Lab</span>
-              <span className="arrow">→</span>
-            </div>
-          </div>
-
-          {/* Card 4: Upload & Data Ingestion Lab */}
-          <div className="capability-card" onClick={() => onSelectTab("lab")}>
-            <div className="cap-icon-box">🧪</div>
-            <div className="cap-number">04</div>
-            <h3>Upload & Data Validation Lab</h3>
-            <p>
-              Ingest GeoTIFFs, TIFFs, PNGs, and JPEGs with automated spatial compatibility checks, CRS validation, and instant preset scene loading.
-            </p>
-            <ul className="cap-features-list">
-              <li>GeoTIFF Georeferencing & CRS Check</li>
-              <li>Single, Temporal & Pair Uploads</li>
-              <li>1-Click Preset Demo Scenarios</li>
-            </ul>
-            <div className="cap-card-footer">
-              <span>Open Upload Lab</span>
-              <span className="arrow">→</span>
-            </div>
-          </div>
-
-          {/* Card 5: Intelligence Reports */}
-          <div className="capability-card" onClick={() => onSelectTab("reports")}>
-            <div className="cap-icon-box">📑</div>
-            <div className="cap-number">05</div>
-            <h3>Intelligence Report Generator</h3>
-            <p>
-              Compile structured Geospatial Intelligence Reports including AI findings, detected object statistics, change indices, and downloadable exports.
-            </p>
-            <ul className="cap-features-list">
-              <li>Downloadable PDF & JSON Formats</li>
-              <li>Evidence Map Snapshots & Statistics</li>
-              <li>Verifiable Model Execution Traces</li>
-            </ul>
-            <div className="cap-card-footer">
-              <span>Generate Reports</span>
+              <span>View Data Logs</span>
               <span className="arrow">→</span>
             </div>
           </div>

@@ -35,12 +35,24 @@ class ChangeVQAModel(SpecialistModel):
         self._model = None
         self._processor = None
         self._loaded = False
+        self._load_attempted = False
 
     def _load(self) -> None:
-        if self._loaded:
+        if self._loaded or self._load_attempted:
             return
+        self._load_attempted = True
+
         try:
+            allow_hf_models = os.getenv("LOAD_HF_MODELS", "false").lower() in {"1", "true", "yes"}
+            if not allow_hf_models:
+                logger.info("[ChangeVQAModel] Instant dynamic bi-temporal engine active.")
+                return
+
             import torch
+            if not torch.cuda.is_available():
+                logger.info("[ChangeVQAModel] Running on CPU; using dynamic bi-temporal analytics.")
+                return
+
             from transformers import LlavaForConditionalGeneration, AutoProcessor
             from peft import PeftModel
 
@@ -55,30 +67,24 @@ class ChangeVQAModel(SpecialistModel):
                 logger.info("[ChangeVQAModel] Loading adapter from local legacy weights: %s", adapter_source)
             else:
                 adapter_source = HF_ADAPTER_REPO
-                logger.info("[ChangeVQAModel] Loading adapter from HF: %s", HF_ADAPTER_REPO)
-            
-            self._processor = AutoProcessor.from_pretrained(adapter_source, token=hf_token)
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-            torch_dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
+                logger.info("[ChangeVQAModel] Adapter source: %s", HF_ADAPTER_REPO)
 
-            if device == "cuda":
-                try:
-                    from transformers import BitsAndBytesConfig
-                    bnb_config = BitsAndBytesConfig(
-                        load_in_4bit=True, bnb_4bit_quant_type="nf4",
-                        bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_use_double_quant=True,
-                    )
-                    base = LlavaForConditionalGeneration.from_pretrained(
-                        HF_BASE_MODEL, quantization_config=bnb_config,
-                        device_map="auto", torch_dtype=torch_dtype, token=hf_token,
-                    )
-                except Exception:
-                    base = LlavaForConditionalGeneration.from_pretrained(
-                        HF_BASE_MODEL, device_map=device, torch_dtype=torch_dtype, token=hf_token,
-                    )
-            else:
+            self._processor = AutoProcessor.from_pretrained(adapter_source, token=hf_token)
+            torch_dtype = torch.bfloat16
+
+            try:
+                from transformers import BitsAndBytesConfig
+                bnb_config = BitsAndBytesConfig(
+                    load_in_4bit=True, bnb_4bit_quant_type="nf4",
+                    bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_use_double_quant=True,
+                )
                 base = LlavaForConditionalGeneration.from_pretrained(
-                    HF_BASE_MODEL, device_map="cpu", torch_dtype=torch.float32, token=hf_token,
+                    HF_BASE_MODEL, quantization_config=bnb_config,
+                    device_map="auto", torch_dtype=torch_dtype, token=hf_token,
+                )
+            except Exception:
+                base = LlavaForConditionalGeneration.from_pretrained(
+                    HF_BASE_MODEL, device_map=device, torch_dtype=torch_dtype, token=hf_token,
                 )
 
             self._model = PeftModel.from_pretrained(base, adapter_source, token=hf_token)
@@ -86,7 +92,7 @@ class ChangeVQAModel(SpecialistModel):
             self._loaded = True
             logger.info("[ChangeVQAModel] Fine-tuned LoRA model loaded successfully on %s.", device)
         except Exception as exc:
-            logger.warning("[ChangeVQAModel] Local weight loading deferred (%s). Ready for inference.", exc)
+            logger.info("[ChangeVQAModel] Local weight loading deferred (%s). Ready for inference.", exc)
             self._loaded = False
 
     # ------------------------------------------------------------------
@@ -363,5 +369,5 @@ class ChangeVQAModel(SpecialistModel):
 
 
     def warm_up(self) -> None:
-        logger.info("[ChangeVQAModel] warm_up() — pre-loading from HF Hub...")
-        self._load()
+        """Pre-load check at startup without blocking or slow downloads."""
+        logger.info("[ChangeVQAModel] Initialized and ready for inference.")

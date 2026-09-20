@@ -131,17 +131,37 @@ def dispatch(
 
 def _resolve_images(image_refs: List[str], metadata: Dict[str, Any]) -> List[Any]:
     """
-    Convert image_refs (strings) into objects the model stubs can accept.
-
-    In the stub implementation we just pass the ref strings through so the
-    models can log them. In a real deployment, load the GeoTIFFs with rasterio
-    and return numpy arrays (or PIL Images) here.
+    Convert image_refs (strings) into objects with real file paths that models can read.
     """
-    if not image_refs:
-        # Return a placeholder so validate_input in stubs doesn't hard-fail
-        return [{"ref": "placeholder", "modality": metadata.get("modality", "optical")}]
+    from pathlib import Path
+    import os
 
-    return [
-        {"ref": ref, "modality": metadata.get("modality", "optical")}
-        for ref in image_refs
-    ]
+    sessions_dir = Path(os.getenv("SESSIONS_DIR", "./sessions"))
+    resolved: List[Dict[str, Any]] = []
+
+    for ref in image_refs:
+        path_candidate: Optional[str] = None
+
+        # 1. Direct path check
+        p = Path(ref)
+        if p.exists() and p.is_file():
+            path_candidate = str(p.resolve())
+        else:
+            # 2. Search in sessions directory
+            matches = list(sessions_dir.glob(f"**/*{ref}*"))
+            # Prefer original upload or preview
+            for m in matches:
+                if m.is_file() and m.suffix.lower() in {".tif", ".tiff", ".png", ".jpg", ".jpeg"}:
+                    path_candidate = str(m.resolve())
+                    break
+
+        resolved.append({
+            "ref": ref,
+            "path": path_candidate,
+            "modality": metadata.get("modality", "optical"),
+        })
+
+    if not resolved:
+        return [{"ref": "placeholder", "path": None, "modality": metadata.get("modality", "optical")}]
+
+    return resolved

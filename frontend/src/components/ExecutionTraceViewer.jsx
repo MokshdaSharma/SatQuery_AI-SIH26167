@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useRef } from "react";
+import FormattedAnswer from "./FormattedAnswer";
 
 const TASK_META = {
   vqa:                { icon: "💬", label: "Visual Q&A",         color: "#818cf8" },
@@ -192,7 +193,7 @@ export default function ExecutionTraceViewer({ result, onClose }) {
                 💡 AI Answer
               </div>
               <div style={{ fontSize: 13, lineHeight: 1.65, color: "var(--color-text-primary)" }}>
-                {result.answer}
+                <FormattedAnswer text={result.answer} />
               </div>
               {result.evidence_geojson?.features?.length > 0 && (
                 <div style={{ marginTop: 10, fontSize: 11.5, color: "var(--color-text-muted)" }}>

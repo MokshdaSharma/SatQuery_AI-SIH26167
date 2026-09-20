@@ -70,17 +70,21 @@ export async function submitQuery({
   conversationHistory,
 }) {
   try {
-    const { data } = await client.post("/api/query", {
-      roi_geojson: roiGeojson,
-      query,
-      image_refs: imageRefs || [],
-      modality,
-      date_start: dateStart,
-      date_end: dateEnd || undefined,
-      date_start_2: dateStart2 || undefined,
-      date_end_2: dateEnd2 || undefined,
-      conversation_history: conversationHistory || undefined,
-    });
+    const payload = {
+      query: (typeof query === "string" && query.trim()) ? query.trim() : "Analyze this satellite scene.",
+      modality: modality || "optical",
+    };
+    if (roiGeojson && typeof roiGeojson === "object") payload.roi_geojson = roiGeojson;
+    if (imageRefs && Array.isArray(imageRefs) && imageRefs.length > 0) payload.image_refs = imageRefs;
+    if (dateStart && typeof dateStart === "string") payload.date_start = dateStart;
+    if (dateEnd && typeof dateEnd === "string") payload.date_end = dateEnd;
+    if (dateStart2 && typeof dateStart2 === "string") payload.date_start_2 = dateStart2;
+    if (dateEnd2 && typeof dateEnd2 === "string") payload.date_end_2 = dateEnd2;
+    if (conversationHistory && Array.isArray(conversationHistory) && conversationHistory.length > 0) {
+      payload.conversation_history = conversationHistory;
+    }
+
+    const { data } = await client.post("/api/query", payload);
     return data;
   } catch (err) {
     throw normaliseError(err);

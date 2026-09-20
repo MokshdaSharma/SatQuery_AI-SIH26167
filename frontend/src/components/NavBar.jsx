@@ -34,7 +34,6 @@ export default function NavBar({
     { id: "home", label: "Home", icon: "🏠" },
     { id: "mapping", label: "Mapping", icon: "🌐" },
     { id: "change", label: "Upload & Analysis", icon: "📤" },
-    { id: "fusion", label: "Cross-Modal Fusion", icon: "📊" },
     { id: "logs", label: "Data Logs", icon: "🗄️" },
   ];
 

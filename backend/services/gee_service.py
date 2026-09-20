@@ -244,22 +244,25 @@ def _fetch_sentinel2(
 
     image = first_image.clip(roi).select(["B4", "B3", "B2"])  # RGB
 
-    # Export thumbnail
+    # Export thumbnail / preview
     session_dir = _SESSIONS_DIR / session_id
     session_dir.mkdir(parents=True, exist_ok=True)
     image_id = f"s2_{session_id}"
     tiff_path = str(session_dir / f"{image_id}.tif")
 
-    try:
-        geemap.ee_export_image(
-            image,
-            filename=tiff_path,
-            scale=10,
-            region=roi,
-            file_per_band=False,
-        )
-    except Exception as exc:
-        logger.warning("GeoTIFF export failed (non-fatal): %s", exc)
+    if geemap is not None:
+        try:
+            geemap.ee_export_image(
+                image,
+                filename=tiff_path,
+                scale=10,
+                region=roi,
+                file_per_band=False,
+            )
+        except Exception as exc:
+            logger.warning("GeoTIFF export failed (non-fatal): %s", exc)
+            tiff_path = None
+    else:
         tiff_path = None
 
     # Thumbnail URL via getThumbURL
@@ -269,6 +272,18 @@ def _fetch_sentinel2(
         )
     except Exception:
         preview_url = None
+
+    if (not tiff_path or not Path(tiff_path).exists()) and preview_url:
+        try:
+            import requests as http_requests
+            r = http_requests.get(preview_url, timeout=30)
+            if r.status_code == 200:
+                img_path = session_dir / f"{image_id}.jpg"
+                with open(img_path, "wb") as f:
+                    f.write(r.content)
+                tiff_path = str(img_path)
+        except Exception as exc:
+            logger.warning("Saving local preview image failed: %s", exc)
 
     return [
         {
@@ -316,16 +331,19 @@ def _fetch_sentinel1(
     image_id = f"s1_{session_id}"
     tiff_path = str(session_dir / f"{image_id}.tif")
 
-    try:
-        geemap.ee_export_image(
-            image,
-            filename=tiff_path,
-            scale=10,
-            region=roi,
-            file_per_band=False,
-        )
-    except Exception as exc:
-        logger.warning("SAR GeoTIFF export failed (non-fatal): %s", exc)
+    if geemap is not None:
+        try:
+            geemap.ee_export_image(
+                image,
+                filename=tiff_path,
+                scale=10,
+                region=roi,
+                file_per_band=False,
+            )
+        except Exception as exc:
+            logger.warning("SAR GeoTIFF export failed (non-fatal): %s", exc)
+            tiff_path = None
+    else:
         tiff_path = None
 
     try:
@@ -334,6 +352,18 @@ def _fetch_sentinel1(
         )
     except Exception:
         preview_url = None
+
+    if (not tiff_path or not Path(tiff_path).exists()) and preview_url:
+        try:
+            import requests as http_requests
+            r = http_requests.get(preview_url, timeout=30)
+            if r.status_code == 200:
+                img_path = session_dir / f"{image_id}.jpg"
+                with open(img_path, "wb") as f:
+                    f.write(r.content)
+                tiff_path = str(img_path)
+        except Exception as exc:
+            logger.warning("Saving local SAR preview image failed: %s", exc)
 
     return [
         {

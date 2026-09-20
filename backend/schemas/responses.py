@@ -92,4 +92,8 @@ class UploadResponse(BaseModel):
     has_georef: bool = False
     geo_bounds: Optional[List[float]] = None    # [west, south, east, north] WGS-84
     map_corners: Optional[List[List[float]]] = None  # [[NW],[NE],[SE],[SW]] lon/lat for Mapbox
+    width: Optional[int] = None
+    height: Optional[int] = None
+    bands: Optional[int] = None
+    file_size_bytes: Optional[int] = None
     warnings: List[str] = Field(default_factory=list)

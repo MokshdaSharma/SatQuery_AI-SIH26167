@@ -111,15 +111,24 @@ def process_upload(
     map_corners: Optional[List[List[float]]] = None
     has_georef = False
     preview_path: Optional[Path] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    bands: Optional[int] = 3
 
     if suffix in {".tif", ".tiff"} and _RASTERIO_AVAILABLE:
-        geo_bounds, map_corners, has_georef, preview_path = _extract_geotiff(
+        geo_bounds, map_corners, has_georef, preview_path, width, height, bands = _extract_geotiff(
             saved_path, session_dir, image_id
         )
 
     # ── Generate preview for non-GeoTIFF or if rasterio preview failed ────
-    if preview_path is None:
-        preview_path = _generate_preview(saved_path, session_dir, image_id)
+    if preview_path is None or width is None:
+        p_path, p_w, p_h, p_b = _generate_preview(saved_path, session_dir, image_id)
+        if preview_path is None:
+            preview_path = p_path
+        if width is None:
+            width = p_w
+            height = p_h
+            bands = p_b
 
     preview_url = (
         f"/api/download/{session_id}/preview_{image_id}.png"
@@ -147,6 +156,10 @@ def process_upload(
         "geo_bounds":   geo_bounds,
         "map_corners":  map_corners,
         "has_georef":   has_georef,
+        "width":        width or 1024,
+        "height":       height or 1024,
+        "bands":        bands or 3,
+        "file_size_bytes": len(file_bytes),
     }
 
 
@@ -158,20 +171,26 @@ def _extract_geotiff(
     tiff_path: Path,
     session_dir: Path,
     image_id: str,
-) -> Tuple[Optional[List[float]], Optional[List[List[float]]], bool, Optional[Path]]:
+) -> Tuple[Optional[List[float]], Optional[List[List[float]]], bool, Optional[Path], Optional[int], Optional[int], Optional[int]]:
     """
     Extract geo bounds + generate RGB preview PNG from a GeoTIFF.
 
     Returns:
-        (geo_bounds, map_corners, has_georef, preview_path)
+        (geo_bounds, map_corners, has_georef, preview_path, width, height, bands)
     """
     geo_bounds = None
     map_corners = None
     has_georef = False
     preview_path = None
+    width = None
+    height = None
+    bands = None
 
     try:
         with rasterio.open(tiff_path) as src:
+            width = src.width
+            height = src.height
+            bands = src.count
             crs = src.crs
             bounds = src.bounds  # in src CRS
 
@@ -191,8 +210,8 @@ def _extract_geotiff(
                 ]
 
                 logger.info(
-                    "[ImageUpload] GeoTIFF bounds (WGS-84): W=%.4f S=%.4f E=%.4f N=%.4f",
-                    west, south, east, north,
+                    "[ImageUpload] GeoTIFF bounds (WGS-84): W=%.4f S=%.4f E=%.4f N=%.4f (%dx%d, %d bands)",
+                    west, south, east, north, width, height, bands
                 )
 
             # ── Generate preview PNG ───────────────────────────────────────────
@@ -202,7 +221,11 @@ def _extract_geotiff(
     except Exception as exc:
         logger.warning("[ImageUpload] GeoTIFF processing failed (non-fatal): %s", exc)
 
-    return geo_bounds, map_corners, has_georef, preview_path
+    return geo_bounds, map_corners, has_georef, preview_path, width, height, bands
+
+
+from PIL import Image as PILImage, ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
 def _geotiff_to_preview_png(src, out_path: Path, max_dim: int = 1024) -> None:
@@ -217,22 +240,39 @@ def _geotiff_to_preview_png(src, out_path: Path, max_dim: int = 1024) -> None:
     else:
         band_idxs = [1, 1, 1]   # grayscale → RGB
 
-    # Downsample to max_dim if needed
     scale = min(1.0, max_dim / max(src.width, src.height))
     out_w = max(1, int(src.width * scale))
     out_h = max(1, int(src.height * scale))
 
     rgb = []
     for bi in band_idxs:
-        band = src.read(
-            bi,
-            out_shape=(1, out_h, out_w),
-            resampling=Resampling.lanczos,
-        )[0].astype(np.float32)
+        try:
+            band = src.read(
+                bi,
+                out_shape=(1, out_h, out_w),
+                resampling=Resampling.lanczos,
+            )[0].astype(np.float32)
+        except Exception:
+            try:
+                raw = src.read(bi).astype(np.float32)
+                if raw.shape != (out_h, out_w):
+                    # Resize via PIL
+                    p_img = PILImage.fromarray(raw)
+                    p_img = p_img.resize((out_w, out_h), PILImage.BILINEAR)
+                    band = np.array(p_img, dtype=np.float32)
+                else:
+                    band = raw
+            except Exception:
+                band = np.zeros((out_h, out_w), dtype=np.float32)
+
         # Percentile stretch
-        p2, p98 = np.nanpercentile(band, [2, 98])
-        if p98 > p2:
-            band = np.clip((band - p2) / (p98 - p2), 0, 1)
+        valid = band[~np.isnan(band)]
+        if len(valid) > 0:
+            p2, p98 = np.percentile(valid, [2, 98])
+            if p98 > p2:
+                band = np.clip((band - p2) / (p98 - p2), 0, 1)
+            else:
+                band = np.clip(band / (np.max(band) or 1.0), 0, 1)
         else:
             band = np.zeros_like(band)
         rgb.append((band * 255).astype(np.uint8))
@@ -242,15 +282,18 @@ def _geotiff_to_preview_png(src, out_path: Path, max_dim: int = 1024) -> None:
     logger.info("[ImageUpload] Preview written → %s", out_path)
 
 
-def _generate_preview(src_path: Path, session_dir: Path, image_id: str) -> Optional[Path]:
+def _generate_preview(src_path: Path, session_dir: Path, image_id: str) -> Tuple[Optional[Path], Optional[int], Optional[int], Optional[int]]:
     """Generate a preview PNG for non-GeoTIFF images using Pillow."""
     out_path = session_dir / f"preview_{image_id}.png"
     try:
         with PILImage.open(src_path) as img:
-            img.thumbnail((1024, 1024), PILImage.LANCZOS)
-            img.convert("RGB").save(str(out_path), "PNG")
-        logger.info("[ImageUpload] Pillow preview → %s", out_path)
-        return out_path
+            w, h = img.width, img.height
+            bands = len(img.getbands())
+            preview_img = img.copy()
+            preview_img.thumbnail((1024, 1024), PILImage.LANCZOS)
+            preview_img.convert("RGB").save(str(out_path), "PNG")
+        logger.info("[ImageUpload] Pillow preview → %s (%dx%d, %d bands)", out_path, w, h, bands)
+        return out_path, w, h, bands
     except Exception as exc:
         logger.warning("[ImageUpload] Preview generation failed: %s", exc)
-        return None
+        return None, None, None, None

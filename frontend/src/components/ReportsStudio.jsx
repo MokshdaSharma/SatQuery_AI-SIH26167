@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import FormattedAnswer from "./FormattedAnswer";
 
 export default function ReportsStudio({ queryResult, currentROI, onSelectTab }) {
   const [reportTitle, setReportTitle] = useState("Geospatial Intelligence Assessment — Sector Alpha");
@@ -151,12 +152,14 @@ export default function ReportsStudio({ queryResult, currentROI, onSelectTab }) 
         </div>
 
         {/* Executive Summary Section */}
-        <div className="doc-section">
-          <h3 className="doc-section-heading">1. Executive AI Analysis Summary</h3>
-          <div className="doc-callout-box">
-            <p className="doc-callout-text">{reportData.answer}</p>
+          <div className="doc-section">
+            <h3 className="doc-section-heading">1. Executive AI Analysis Summary</h3>
+            <div className="doc-callout-box">
+              <div className="doc-callout-text">
+                <FormattedAnswer text={reportData.answer} />
+              </div>
+            </div>
           </div>
-        </div>
 
         {/* Detected Objects & Land-Cover Statistics */}
         <div className="doc-section">

@@ -15,6 +15,7 @@ import { useState } from "react";
 import { downloadFile } from "../api";
 import ConfidenceGauge from "./ConfidenceGauge";
 import ExecutionTraceViewer from "./ExecutionTraceViewer";
+import FormattedAnswer from "./FormattedAnswer";
 
 const EXPORT_OPTIONS = [
   { key: "pdf",     label: "📄 PDF Report",  desc: "Formatted analysis report" },
@@ -259,7 +260,7 @@ export default function ResultPanel({ result, isLoading, error, onExport, isExpo
         <div className="panel-section" style={{ paddingTop: 12 }}>
           <div className="section-title"><span>📝</span> Scene Summary & AI Analysis</div>
           <div className="result-answer" style={{ lineHeight: 1.6, fontSize: 13 }}>
-            {result.answer}
+            <FormattedAnswer text={result.answer} />
           </div>
         </div>
 

@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import FormattedAnswer from "./FormattedAnswer";
 
 export default function GlobalResultsDrawer({ queryResult, currentROI, onOpenTrace, onSelectTab }) {
   const [isMinimized, setIsMinimized] = useState(false);
@@ -25,28 +26,27 @@ export default function GlobalResultsDrawer({ queryResult, currentROI, onOpenTra
       a.download = `SatQuery_Evidence_${Date.now()}.geojson`;
       a.click();
     } else if (format === "pdf") {
-      onSelectTab("reports");
+      if (onSelectTab) onSelectTab("reports");
     }
   };
 
-  const confidencePct = queryResult.confidence ? Math.round(queryResult.confidence * 100) : 89;
-  const featureCount = queryResult.evidence_geojson?.features?.length || (queryResult.change_types?.length ? queryResult.change_types.length * 2 : 3);
+  const featureCount = queryResult.evidence_geojson?.features?.length || 0;
 
   return (
-    <div className={`global-results-drawer ${isMinimized ? "minimized" : ""}`}>
+    <div className={`global-results-drawer-bar ${isMinimized ? "minimized" : ""}`}>
       {/* Header bar with minimize toggle */}
       <div className="drawer-bar-header">
-        <div className="bar-title-group">
-          <span className="ai-dot pulsing"></span>
-          <span className="bar-title">AI Analysis Summary</span>
-          <span className="bar-confidence">{confidencePct}% Confidence</span>
+        <div className="drawer-bar-title-group">
+          <span className="pulse-dot"></span>
+          <span className="bar-title">Active AI Interpretation Layer</span>
+          <span className="confidence-pill">{(queryResult.confidence * 100).toFixed(0)}% Confidence</span>
         </div>
 
-        <div className="bar-actions-group">
+        <div className="drawer-bar-actions">
           <button
             className="bar-action-btn trace"
             onClick={onOpenTrace}
-            title="Inspect Agent Execution Trace"
+            title="Inspect Agent Decision Graph"
           >
             ⚡ Execution Trace
           </button>
@@ -68,7 +68,9 @@ export default function GlobalResultsDrawer({ queryResult, currentROI, onOpenTra
 
           <div className="summary-col result-col">
             <span className="col-label">AI Finding:</span>
-            <p className="result-text">{queryResult.answer}</p>
+            <div className="result-text">
+              <FormattedAnswer text={queryResult.answer} />
+            </div>
           </div>
 
           <div className="summary-col evidence-col">

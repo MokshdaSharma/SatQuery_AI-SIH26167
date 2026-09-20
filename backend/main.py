@@ -517,6 +517,10 @@ async def upload_image(
         has_georef=descriptor["has_georef"],
         geo_bounds=descriptor["geo_bounds"],
         map_corners=descriptor["map_corners"],
+        width=descriptor.get("width"),
+        height=descriptor.get("height"),
+        bands=descriptor.get("bands"),
+        file_size_bytes=descriptor.get("file_size_bytes"),
         warnings=warnings,
     )
 
