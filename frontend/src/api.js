@@ -155,6 +155,54 @@ export async function uploadImage(file, onProgress) {
   }
 }
 
+// ─── POST /api/detect-changes ────────────────────────────────────────────────
+/**
+ * Bi-temporal Change Detection & Semantic Segmentation.
+ *
+ * @param {object} params
+ * @param {File|null} params.file1
+ * @param {File|null} params.file2
+ * @param {string|null} params.imageId1
+ * @param {string|null} params.imageId2
+ * @param {string|null} params.date1
+ * @param {string|null} params.date2
+ * @param {string|null} params.query
+ * @param {function} [params.onProgress]
+ * @returns {Promise<any>}
+ */
+export async function detectBiTemporalChanges({
+  file1,
+  file2,
+  imageId1,
+  imageId2,
+  date1,
+  date2,
+  query,
+  onProgress,
+}) {
+  const formData = new FormData();
+  if (file1) formData.append("file_1", file1);
+  if (file2) formData.append("file_2", file2);
+  if (imageId1) formData.append("image_id_1", imageId1);
+  if (imageId2) formData.append("image_id_2", imageId2);
+  if (date1) formData.append("date_1", date1);
+  if (date2) formData.append("date_2", date2);
+  if (query) formData.append("query", query);
+
+  try {
+    const { data } = await client.post("/api/detect-changes", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 180_000,
+      onUploadProgress: onProgress
+        ? (e) => onProgress(Math.round((e.loaded * 100) / (e.total || 1)))
+        : undefined,
+    });
+    return data;
+  } catch (err) {
+    throw normaliseError(err);
+  }
+}
+
 // ─── Download helper ──────────────────────────────────────────────────────────
 /**
  * Trigger a browser file download for an exported file.
@@ -165,3 +213,4 @@ export async function uploadImage(file, onProgress) {
 export function downloadFile(sessionId, filename) {
   window.open(`${BASE_URL}/api/download/${sessionId}/${filename}`, "_blank");
 }
+

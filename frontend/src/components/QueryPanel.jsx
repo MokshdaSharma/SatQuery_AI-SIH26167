@@ -101,10 +101,10 @@ export default function QueryPanel({
     setQuery("");
   }
 
-  function applyExample(text) {
+  function applyExample(text, cat) {
     setQuery(text);
-    if (text.toLowerCase().includes("since") || text.toLowerCase().includes("change") ||
-        text.toLowerCase().includes("between") || text.toLowerCase().includes("increased")) {
+    if (cat === "change" || text.toLowerCase().includes("between two") ||
+        text.toLowerCase().includes("since 2022") || text.toLowerCase().includes("increased between")) {
       setShowSecondDate(true);
       if (!dateStart2) setDateStart2("2023-01-01");
     }
@@ -371,13 +371,13 @@ export default function QueryPanel({
             </div>
 
             <div className="example-list" role="list">
-              {QUERY_EXAMPLES.filter(q => selectedCategory === "all" || q.cat === selectedCategory).slice(0, 3).map(({ icon, label, text }, i) => (
+              {QUERY_EXAMPLES.filter(q => selectedCategory === "all" || q.cat === selectedCategory).slice(0, 3).map(({ cat, icon, label, text }, i) => (
                 <button
                   key={i}
                   type="button"
                   id={`example-query-${i}`}
                   className="example-chip"
-                  onClick={() => applyExample(text)}
+                  onClick={() => applyExample(text, cat)}
                   role="listitem"
                 >
                   <span className="example-chip__icon">{icon}</span>

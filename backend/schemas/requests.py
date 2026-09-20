@@ -95,10 +95,24 @@ class QueryRequest(BaseModel):
         default=None,
         description="Second epoch end date",
     )
-    conversation_history: Optional[List[Dict[str, str]]] = Field(
+    conversation_history: Optional[List[Dict[str, Any]]] = Field(
         default=None,
         description="Optional list of prior chat turns: [{'query': str, 'answer': str}] for multi-turn context",
     )
+
+    @field_validator("conversation_history", mode="before")
+    @classmethod
+    def clean_conversation_history(cls, v: Any) -> Optional[List[Dict[str, Any]]]:
+        if not v or not isinstance(v, list):
+            return None
+        cleaned = []
+        for item in v:
+            if isinstance(item, dict):
+                cleaned.append({
+                    "query": str(item.get("query", "")),
+                    "answer": str(item.get("answer", "")),
+                })
+        return cleaned if cleaned else None
 
     @field_validator("query", mode="before")
     @classmethod

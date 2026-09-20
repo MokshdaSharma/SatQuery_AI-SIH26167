@@ -231,55 +231,45 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 def _geotiff_to_preview_png(src, out_path: Path, max_dim: int = 1024) -> None:
     """Read a GeoTIFF and save a normalised RGB PNG preview."""
     import numpy as np
+    from PIL import Image as PILImage
 
     n_bands = src.count
-
-    # Choose RGB bands — try common band orderings
-    if n_bands >= 3:
-        band_idxs = [1, 2, 3]   # R, G, B (1-indexed)
-    else:
-        band_idxs = [1, 1, 1]   # grayscale → RGB
-
     scale = min(1.0, max_dim / max(src.width, src.height))
     out_w = max(1, int(src.width * scale))
     out_h = max(1, int(src.height * scale))
 
+    band_idxs = [1, 2, 3] if n_bands >= 3 else [1, 1, 1]
+
     rgb = []
     for bi in band_idxs:
         try:
-            band = src.read(
-                bi,
-                out_shape=(1, out_h, out_w),
-                resampling=Resampling.lanczos,
-            )[0].astype(np.float32)
+            band = src.read(bi, out_shape=(out_h, out_w), resampling=Resampling.bilinear).astype(np.float32)
         except Exception:
             try:
-                raw = src.read(bi).astype(np.float32)
-                if raw.shape != (out_h, out_w):
-                    # Resize via PIL
-                    p_img = PILImage.fromarray(raw)
-                    p_img = p_img.resize((out_w, out_h), PILImage.BILINEAR)
+                band = src.read(bi).astype(np.float32)
+                if band.shape != (out_h, out_w):
+                    p_img = PILImage.fromarray(band, mode="F").resize((out_w, out_h), PILImage.Resampling.BILINEAR)
                     band = np.array(p_img, dtype=np.float32)
-                else:
-                    band = raw
             except Exception:
                 band = np.zeros((out_h, out_w), dtype=np.float32)
 
-        # Percentile stretch
+        # Percentile stretch 2% to 98%
         valid = band[~np.isnan(band)]
         if len(valid) > 0:
             p2, p98 = np.percentile(valid, [2, 98])
             if p98 > p2:
-                band = np.clip((band - p2) / (p98 - p2), 0, 1)
+                band = np.clip((band - p2) / (p98 - p2), 0.0, 1.0)
             else:
-                band = np.clip(band / (np.max(band) or 1.0), 0, 1)
+                max_v = float(np.max(band))
+                band = np.clip(band / (max_v if max_v > 0 else 1.0), 0.0, 1.0)
         else:
             band = np.zeros_like(band)
-        rgb.append((band * 255).astype(np.uint8))
+
+        rgb.append((band * 255.0).astype(np.uint8))
 
     arr = np.stack(rgb, axis=-1)
-    PILImage.fromarray(arr, "RGB").save(str(out_path), "PNG")
-    logger.info("[ImageUpload] Preview written → %s", out_path)
+    PILImage.fromarray(arr, mode="RGB").save(str(out_path), format="PNG")
+    logger.info("[ImageUpload] Preview written successfully → %s (%dx%d)", out_path, out_w, out_h)
 
 
 def _generate_preview(src_path: Path, session_dir: Path, image_id: str) -> Tuple[Optional[Path], Optional[int], Optional[int], Optional[int]]:

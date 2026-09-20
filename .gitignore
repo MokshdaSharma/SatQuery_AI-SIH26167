@@ -166,7 +166,3 @@ test_output/
 .agents/
 .system_generated/
 *.tsbuildinfo
-
-
-docs/
-ref_docs/

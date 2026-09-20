@@ -204,6 +204,17 @@ def _match_patterns(text: str, compiled_patterns) -> List[str]:
     return matches
 
 
+_BI_TEMPORAL_PATTERNS = [
+    r"\bbefore (and|&) after\b", r"\btemporal\b",
+    r"\bcompare\b", r"\bdifference\b",
+    r"\bbetween \d{4} and \d{4}\b",
+    r"\bover (the )?(past|last)\b", r"\bsince \d{4}\b",
+    r"\bbetween the two\b", r"\bhow has (the )?.* changed\b",
+]
+
+_BI_TEMPORAL_RE = _compile(_BI_TEMPORAL_PATTERNS)
+
+
 def classify_task(
     query: str,
     modality: str = "optical",
@@ -214,11 +225,12 @@ def classify_task(
     Classify *query* into one of the five task types.
 
     Priority order (highest to lowest):
-      1. fusion    — explicit SAR / fusion keywords OR modality == "both"
-      2. change_vqa — temporal change keywords OR second date provided
-      3. grounding  — spatial localisation keywords
-      4. caption    — description / overview keywords
-      5. vqa        — default fallback
+      1. fusion      — explicit SAR / fusion keywords OR modality == "both"
+      2. change_vqa  — second date provided OR explicit bi-temporal comparative keywords
+      3. grounding   — spatial localisation keywords ("where", "locate", "find", "highlight")
+      4. caption     — description / overview keywords ("describe", "overview", "what is in")
+      5. vqa / change — if single date + change keywords (e.g. deforestation, vegetation loss),
+                       handle as single-scene visual QA (or default fallback VQA).
 
     Args:
         query:           The raw natural-language query.
@@ -231,10 +243,11 @@ def classify_task(
     """
     text = query.strip()
 
-    fusion_kw   = _match_patterns(text, _FUSION_RE)
-    change_kw   = _match_patterns(text, _CHANGE_RE)
-    grounding_kw = _match_patterns(text, _GROUNDING_RE)
-    caption_kw  = _match_patterns(text, _CAPTION_RE)
+    fusion_kw      = _match_patterns(text, _FUSION_RE)
+    bi_temporal_kw = _match_patterns(text, _BI_TEMPORAL_RE)
+    change_kw      = _match_patterns(text, _CHANGE_RE)
+    grounding_kw   = _match_patterns(text, _GROUNDING_RE)
+    caption_kw     = _match_patterns(text, _CAPTION_RE)
 
     # ── Priority 1: Fusion ──────────────────────────────────────────────────
     if fusion_kw or modality == "both":
@@ -249,17 +262,24 @@ def classify_task(
             ),
         )
 
-    # ── Priority 2: Change VQA ──────────────────────────────────────────────
-    if change_kw or has_second_date:
+    # ── Priority 2: Bi-temporal Change VQA ──────────────────────────────────
+    if has_second_date:
         return TaskClassification(
             task_type=CHANGE_VQA,
-            confidence=0.82 if change_kw else 0.70,
+            confidence=0.88 if change_kw else 0.75,
             matched_keywords=change_kw or ["second_date_provided"],
             reasoning=(
-                "Classified as CHANGE_VQA because "
-                + (f"temporal change keywords detected: {change_kw}" if change_kw
-                   else "a second epoch date was supplied.")
+                "Classified as CHANGE_VQA because a second observation epoch was provided."
+                + (f" (keywords: {change_kw})" if change_kw else "")
             ),
+        )
+
+    if bi_temporal_kw:
+        return TaskClassification(
+            task_type=CHANGE_VQA,
+            confidence=0.82,
+            matched_keywords=bi_temporal_kw,
+            reasoning=f"Classified as CHANGE_VQA — explicit bi-temporal comparative phrasing detected: {bi_temporal_kw}",
         )
 
     # ── Priority 3: Grounding ───────────────────────────────────────────────
@@ -280,7 +300,16 @@ def classify_task(
             reasoning=f"Classified as CAPTION — description keywords: {caption_kw}",
         )
 
-    # ── Priority 5: VQA (default) ───────────────────────────────────────────
+    # ── Priority 5: Single-date change / condition queries → VQA ─────────────
+    if change_kw:
+        return TaskClassification(
+            task_type=VQA,
+            confidence=0.76,
+            matched_keywords=change_kw,
+            reasoning=f"Classified as VQA — single-epoch visual assessment for environmental/structural state: {change_kw}",
+        )
+
+    # ── Priority 6: VQA (default) ───────────────────────────────────────────
     return TaskClassification(
         task_type=VQA,
         confidence=0.60,

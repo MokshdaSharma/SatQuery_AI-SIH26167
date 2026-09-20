@@ -33,6 +33,7 @@ export default function NavBar({
   const TABS = [
     { id: "home", label: "Home", icon: "🏠" },
     { id: "mapping", label: "Mapping", icon: "🌐" },
+    { id: "change_detection", label: "Change Detection", icon: "🔄" },
     { id: "change", label: "Upload & Analysis", icon: "📤" },
     { id: "logs", label: "Data Logs", icon: "🗄️" },
   ];

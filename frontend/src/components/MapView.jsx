@@ -174,9 +174,9 @@ export default function MapView({
   const [layerOpacity, setLayerOpacity] = useState(0.8);
   const [isLayersCardOpen, setIsLayersCardOpen] = useState(true);
   const [activeTabLayerCard, setActiveTabLayerCard] = useState("osm"); // 'osm' | 'change'
-  const [selectedState, setSelectedState] = useState("Andhra Pradesh");
+  const [selectedState, setSelectedState] = useState("Punjab");
   const [selectedDistrict, setSelectedDistrict] = useState("");
-  const [coordsDisplay, setCoordsDisplay] = useState("15.44074°N, 83.75996°E");
+  const [coordsDisplay, setCoordsDisplay] = useState("31.1471°N, 75.3412°E");
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasROI, setHasROI] = useState(false);
   const [mapError, setMapError] = useState(null);
@@ -244,8 +244,8 @@ export default function MapView({
       map.current = new mapboxgl.Map({
         container: mapContainer.current,
         style: "mapbox://styles/mapbox/dark-v11",
-        center: [80.5, 15.9], // Andhra Pradesh region
-        zoom: 7.2,
+        center: [75.3412, 31.1471], // Punjab region
+        zoom: 7.8,
         pitch: 0,
         bearing: 0,
       });

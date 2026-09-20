@@ -11,6 +11,7 @@ python-jose>=3.3.0
 
 # ─── Google Earth Engine & Geospatial ───────────────────────────
 earthengine-api>=0.1.409
+google-auth>=2.29.0
 geemap>=0.31.0
 shapely>=2.0.4
 Pillow>=10.3.0
