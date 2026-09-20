@@ -81,6 +81,20 @@ export default function ChangeStudio({
   };
   const currentSev = severityColors[analytics.severity.level] || severityColors.moderate;
 
+  const [showBuilt, setShowBuilt] = useState(true);
+  const [showVeg, setShowVeg] = useState(true);
+  const [showRate, setShowRate] = useState(true);
+  const [activeMilestoneIndex, setActiveMilestoneIndex] = useState(0);
+
+  const handleMilestoneClick = (step, idx) => {
+    setActiveMilestoneIndex(idx);
+    if (idx === 0) {
+      setDateT1(step.date);
+    } else {
+      setDateT2(step.date);
+    }
+  };
+
   return (
     <div className="change-studio-layout">
       {/* Top Banner & Date Selector */}
@@ -152,16 +166,27 @@ export default function ChangeStudio({
               <h3 className="section-title">⏱ Temporal Sequence & Change Timeline</h3>
               <span className="badge badge--cyan">{analytics.temporal_sequence.length} Milestones</span>
             </div>
+            <p style={{ fontSize: 11.5, color: "var(--color-text-muted)", margin: "0 0 12px" }}>
+              💡 Click any milestone below to update the target epoch date in the viewer:
+            </p>
 
             <div className="change-timeline">
               {analytics.temporal_sequence.map((step, idx) => (
-                <div key={idx} className={`timeline-item timeline-item--${step.type}`}>
+                <div
+                  key={idx}
+                  className={`timeline-item timeline-item--${step.type} ${activeMilestoneIndex === idx ? "timeline-item--selected" : ""}`}
+                  onClick={() => handleMilestoneClick(step, idx)}
+                  style={{ cursor: "pointer" }}
+                  title="Click to load this milestone"
+                >
                   <div className="timeline-item__marker">
-                    <div className="timeline-item__dot" />
+                    <div className="timeline-item__dot" style={activeMilestoneIndex === idx ? { transform: "scale(1.3)", boxShadow: "0 0 10px #38bdf8" } : {}} />
                     {idx < analytics.temporal_sequence.length - 1 && <div className="timeline-item__line" />}
                   </div>
                   <div className="timeline-item__content">
-                    <div className="timeline-item__date">{step.date}</div>
+                    <div className="timeline-item__date" style={{ fontWeight: activeMilestoneIndex === idx ? 800 : 600, color: activeMilestoneIndex === idx ? "#38bdf8" : "inherit" }}>
+                      {step.date} {activeMilestoneIndex === idx && "⭐ [Active Epoch]"}
+                    </div>
                     <div className="timeline-item__event">{step.event}</div>
                   </div>
                 </div>
@@ -254,10 +279,31 @@ export default function ChangeStudio({
           <div className="card change-chart-card">
             <div className="card-header-flex">
               <h3 className="section-title">📈 Temporal Change Trends & Spectral Trajectory</h3>
-              <div className="chart-legend-flex">
-                <span className="chart-legend-item chart-legend--built">● Built-up (NDBI)</span>
-                <span className="chart-legend-item chart-legend--veg">● Veg (NDVI)</span>
-                <span className="chart-legend-item chart-legend--rate">● Change Rate %</span>
+              <div className="chart-legend-flex" style={{ display: "flex", gap: 6 }}>
+                <button
+                  type="button"
+                  onClick={() => setShowBuilt(!showBuilt)}
+                  className="filter-pill"
+                  style={{ background: showBuilt ? "rgba(249,115,22,0.2)" : "transparent", color: showBuilt ? "#f97316" : "#64748b", border: "1px solid rgba(249,115,22,0.4)" }}
+                >
+                  {showBuilt ? "✓" : "○"} Built-up (NDBI)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowVeg(!showVeg)}
+                  className="filter-pill"
+                  style={{ background: showVeg ? "rgba(16,185,129,0.2)" : "transparent", color: showVeg ? "#10b981" : "#64748b", border: "1px solid rgba(16,185,129,0.4)" }}
+                >
+                  {showVeg ? "✓" : "○"} Veg (NDVI)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowRate(!showRate)}
+                  className="filter-pill"
+                  style={{ background: showRate ? "rgba(56,189,248,0.2)" : "transparent", color: showRate ? "#38bdf8" : "#64748b", border: "1px solid rgba(56,189,248,0.4)" }}
+                >
+                  {showRate ? "✓" : "○"} Rate %
+                </button>
               </div>
             </div>
 
@@ -271,6 +317,10 @@ export default function ChangeStudio({
                   <linearGradient id="vegGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
                     <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
+                  </linearGradient>
+                  <linearGradient id="rateGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.3" />
+                    <stop offset="100%" stopColor="#38bdf8" stopOpacity="0.0" />
                   </linearGradient>
                 </defs>
 
@@ -293,25 +343,30 @@ export default function ChangeStudio({
                   const getX = (i) => 40 + i * xStep;
                   const getYBuilt = (val) => 150 - val * 130;
                   const getYVeg = (val) => 150 - val * 130;
+                  const getYRate = (val) => 150 - (val / 20) * 130;
 
                   const pathBuilt = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${getX(i)} ${getYBuilt(p.built_up_index)}`).join(" ");
                   const pathVeg = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${getX(i)} ${getYVeg(p.vegetation_index)}`).join(" ");
+                  const pathRate = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${getX(i)} ${getYRate(p.change_rate)}`).join(" ");
 
                   return (
                     <>
                       {/* Area fills */}
-                      <path d={`${pathBuilt} L ${getX(pts.length - 1)} 150 L 40 150 Z`} fill="url(#builtGrad)" />
-                      <path d={`${pathVeg} L ${getX(pts.length - 1)} 150 L 40 150 Z`} fill="url(#vegGrad)" />
+                      {showBuilt && <path d={`${pathBuilt} L ${getX(pts.length - 1)} 150 L 40 150 Z`} fill="url(#builtGrad)" />}
+                      {showVeg && <path d={`${pathVeg} L ${getX(pts.length - 1)} 150 L 40 150 Z`} fill="url(#vegGrad)" />}
+                      {showRate && <path d={`${pathRate} L ${getX(pts.length - 1)} 150 L 40 150 Z`} fill="url(#rateGrad)" />}
 
                       {/* Line paths */}
-                      <path d={pathBuilt} fill="none" stroke="#f97316" strokeWidth="2.5" />
-                      <path d={pathVeg} fill="none" stroke="#10b981" strokeWidth="2.5" />
+                      {showBuilt && <path d={pathBuilt} fill="none" stroke="#f97316" strokeWidth="2.5" />}
+                      {showVeg && <path d={pathVeg} fill="none" stroke="#10b981" strokeWidth="2.5" />}
+                      {showRate && <path d={pathRate} fill="none" stroke="#38bdf8" strokeWidth="2.5" strokeDasharray="4 2" />}
 
                       {/* Data dots and X labels */}
                       {pts.map((p, i) => (
                         <g key={i}>
-                          <circle cx={getX(i)} cy={getYBuilt(p.built_up_index)} r="4" fill="#f97316" stroke="#fff" strokeWidth="1.5" />
-                          <circle cx={getX(i)} cy={getYVeg(p.vegetation_index)} r="4" fill="#10b981" stroke="#fff" strokeWidth="1.5" />
+                          {showBuilt && <circle cx={getX(i)} cy={getYBuilt(p.built_up_index)} r="4" fill="#f97316" stroke="#fff" strokeWidth="1.5" />}
+                          {showVeg && <circle cx={getX(i)} cy={getYVeg(p.vegetation_index)} r="4" fill="#10b981" stroke="#fff" strokeWidth="1.5" />}
+                          {showRate && <circle cx={getX(i)} cy={getYRate(p.change_rate)} r="3.5" fill="#38bdf8" stroke="#fff" strokeWidth="1.5" />}
                           <text x={getX(i)} y="168" fill="#94a3b8" fontSize="10" textAnchor="middle">{p.date}</text>
                         </g>
                       ))}
@@ -343,6 +398,17 @@ export default function ChangeStudio({
                 {isLoading ? "Querying…" : "Ask VQA"}
               </button>
             </div>
+
+            {queryResult?.answer && (
+              <div className="change-answer-box" style={{ marginTop: 12, padding: "10px 14px", background: "rgba(56,189,248,0.08)", borderLeft: "3px solid #38bdf8", borderRadius: "0 6px 6px 0" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#38bdf8", marginBottom: 4 }}>
+                  AI Change Analysis Answer:
+                </div>
+                <p style={{ margin: 0, fontSize: 12.5, color: "#f1f5f9", lineHeight: 1.5 }}>
+                  {queryResult.answer}
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>

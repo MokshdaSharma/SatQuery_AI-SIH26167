@@ -426,6 +426,44 @@ export default function QueryPanel({
               {query.trim().length > 0 && query.trim().length < 3 && (
                 <div className="form-hint">Type at least 3 characters</div>
               )}
+
+              {/* Live detected entity preview */}
+              {(() => {
+                const t = query.toLowerCase();
+                const objs = [];
+                const conds = [];
+                const dates = [];
+                const locs = [];
+
+                if (t.includes("building") || t.includes("urban") || t.includes("structure") || t.includes("house")) objs.push("Buildings");
+                if (t.includes("water") || t.includes("lake") || t.includes("river") || t.includes("flood") || t.includes("moisture")) objs.push("Water Bodies");
+                if (t.includes("road") || t.includes("highway") || t.includes("street") || t.includes("transport")) objs.push("Roads");
+                if (t.includes("vegetation") || t.includes("forest") || t.includes("tree") || t.includes("crop") || t.includes("canopy")) objs.push("Vegetation");
+                if (t.includes("cloud") || t.includes("rain") || t.includes("haze") || t.includes("monsoon") || t.includes("sar") || t.includes("radar")) conds.push("Cloud / SAR Penetration");
+
+                const yearMatches = query.match(/\b(19\d\d|20\d\d)\b/g);
+                if (yearMatches) dates.push(...Array.from(new Set(yearMatches)));
+                if (t.includes("north") || t.includes("sector") || t.includes("visakhapatnam") || t.includes("dubai") || t.includes("kerala") || t.includes("amazon")) {
+                  locs.push(t.includes("visakhapatnam") ? "Visakhapatnam" : t.includes("dubai") ? "Dubai" : t.includes("kerala") ? "Kerala" : t.includes("amazon") ? "Amazon" : "Sector ROI");
+                }
+
+                const hasEntities = objs.length > 0 || conds.length > 0 || dates.length > 0 || locs.length > 0;
+                if (!hasEntities) return null;
+
+                return (
+                  <div className="live-entity-preview" style={{ marginTop: 8, padding: "6px 10px", background: "rgba(56,189,248,0.06)", borderRadius: 6, border: "1px solid rgba(56,189,248,0.15)" }}>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--color-brand-primary)", marginBottom: 4 }}>
+                      ⚡ Detected Query Entities:
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                      {locs.map((l, i) => <span key={i} className="entity-pill entity-pill--loc">📍 {l}</span>)}
+                      {dates.map((d, i) => <span key={i} className="entity-pill entity-pill--date">📅 {d}</span>)}
+                      {objs.map((o, i) => <span key={i} className="entity-pill entity-pill--obj">🏢 {o}</span>)}
+                      {conds.map((c, i) => <span key={i} className="entity-pill entity-pill--cond">🌧️ {c}</span>)}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {!hasInput && (
