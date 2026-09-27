@@ -14,7 +14,7 @@ services:
       - key: PYTHON_VERSION
         value: "3.11.9"
       - key: CORS_ORIGINS
-        value: "*"
+        value: "https://satqueryai-sih.vercel.app,https://frontend-gamma-five-69.vercel.app,http://localhost:5173,http://localhost:3000,*"
       - key: SESSIONS_DIR
         value: ./sessions
       - key: MODELS_WEIGHTS_DIR
