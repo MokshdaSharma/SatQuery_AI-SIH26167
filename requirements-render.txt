@@ -1,0 +1,40 @@
+# ─── SatQuery AI — Render Deployment Dependencies ────────────────
+# Lightweight variant: CPU-only PyTorch, no GDAL/rasterio build deps
+# ──────────────────────────────────────────────────────────────────
+
+# ─── Core Framework ──────────────────────────────────────────────
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+gunicorn>=22.0.0
+pydantic>=2.7.1
+pydantic-settings>=2.2.1
+python-dotenv>=1.0.1
+python-multipart>=0.0.9
+aiofiles>=23.2.1
+python-jose>=3.3.0
+
+# ─── Google Earth Engine & Geospatial ────────────────────────────
+earthengine-api>=0.1.409
+google-auth>=2.29.0
+shapely>=2.0.4
+Pillow>=10.3.0
+numpy>=1.26.4
+
+# ─── Machine Learning (CPU-only for free tier) ──────────────────
+# torch CPU installed via --extra-index-url in build command
+transformers>=4.40.0
+peft>=0.11.0
+huggingface-hub>=0.23.0
+safetensors>=0.4.3
+accelerate>=0.30.0
+scipy>=1.11.0
+scikit-learn>=1.4.0
+
+# ─── HTTP & LLM Fallbacks ───────────────────────────────────────
+httpx>=0.27.0
+requests>=2.32.2
+openai>=1.0.0
+anthropic>=0.30.0
+
+# ─── Export & Reporting ─────────────────────────────────────────
+reportlab>=4.2.0
