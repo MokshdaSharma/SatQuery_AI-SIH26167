@@ -51,58 +51,117 @@ _GEE_PROJECT          = os.getenv("GEE_PROJECT_ID", "")
 _SESSIONS_DIR         = Path(os.getenv("SESSIONS_DIR", "./sessions"))
 
 _gee_initialised = False
+_gee_init_error: Optional[str] = None
+_gee_init_source: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
-# Initialisation
+# Initialisation & Status
 # ---------------------------------------------------------------------------
+
+def get_gee_status() -> Dict[str, Any]:
+    """Return diagnostic status of Google Earth Engine integration."""
+    return {
+        "available": _GEE_AVAILABLE,
+        "initialised": _gee_initialised,
+        "source": _gee_init_source,
+        "error": _gee_init_error,
+        "project": os.getenv("GEE_PROJECT_ID", ""),
+        "service_account": os.getenv("GEE_SERVICE_ACCOUNT_EMAIL", ""),
+    }
+
 
 def _init_gee() -> bool:
-    """Initialise GEE once.  Returns True on success."""
-    global _gee_initialised
+    """Initialise GEE once. Returns True on success."""
+    global _gee_initialised, _gee_init_error, _gee_init_source
     if _gee_initialised:
         return True
     if not _GEE_AVAILABLE:
+        _gee_init_error = "earthengine-api not installed"
         return False
 
-    # Option 1: Direct JSON string in environment variable (best for cloud platforms like Render)
-    if _GEE_KEY_JSON:
+    service_account = os.getenv("GEE_SERVICE_ACCOUNT_EMAIL", "").strip()
+    key_json = os.getenv("GEE_SERVICE_ACCOUNT_KEY_JSON", "").strip()
+    key_path_env = os.getenv("GEE_SERVICE_ACCOUNT_KEY_PATH", "").strip()
+    project_id = os.getenv("GEE_PROJECT_ID", "").strip()
+
+    # Option 1: Direct JSON string in environment variable (Render / Cloud envs)
+    if key_json:
         try:
-            creds = ee.ServiceAccountCredentials(_GEE_SERVICE_ACCOUNT or None, key_data=_GEE_KEY_JSON)
-            ee.Initialize(creds, project=_GEE_PROJECT or None)
+            import json
+            # Handle potential surrounding quotes from copy-paste
+            clean_json = key_json
+            if (clean_json.startswith("'") and clean_json.endswith("'")) or \
+               (clean_json.startswith('"') and clean_json.endswith('"') and clean_json.startswith('"{')):
+                clean_json = clean_json[1:-1]
+
+            parsed_key = json.loads(clean_json)
+            sa_email = service_account or parsed_key.get("client_email")
+            proj = project_id or parsed_key.get("project_id")
+
+            creds = ee.ServiceAccountCredentials(sa_email, key_data=clean_json)
+            ee.Initialize(creds, project=proj or None)
             _gee_initialised = True
-            logger.info("Google Earth Engine initialised via GEE_SERVICE_ACCOUNT_KEY_JSON (project=%s).", _GEE_PROJECT)
+            _gee_init_source = "GEE_SERVICE_ACCOUNT_KEY_JSON"
+            _gee_init_error = None
+            logger.info("Google Earth Engine initialised via GEE_SERVICE_ACCOUNT_KEY_JSON (project=%s, email=%s).", proj, sa_email)
             return True
         except Exception as exc:
-            logger.warning("GEE initialisation via GEE_SERVICE_ACCOUNT_KEY_JSON failed: %s. Falling back to MOCK mode.", exc)
-            return False
+            _gee_init_error = f"GEE_SERVICE_ACCOUNT_KEY_JSON init error: {exc}"
+            logger.warning("%s. Checking disk paths...", _gee_init_error)
 
-    # Option 2: JSON key file on disk
-    if _GEE_SERVICE_ACCOUNT and _GEE_KEY_PATH:
-        try:
-            # Resolve key path if relative
-            key_path = Path(_GEE_KEY_PATH)
-            if not key_path.is_absolute():
-                if not key_path.exists():
-                    candidate = Path(__file__).resolve().parent.parent / key_path.name
-                    if candidate.exists():
-                        key_path = candidate
-            if key_path.exists():
-                creds = ee.ServiceAccountCredentials(_GEE_SERVICE_ACCOUNT, str(key_path))
-                ee.Initialize(creds, project=_GEE_PROJECT or None)
-                _gee_initialised = True
-                logger.info("Google Earth Engine initialised (project=%s).", _GEE_PROJECT)
-                return True
-            else:
-                logger.warning("GEE key file '%s' not found. Falling back to MOCK mode.", key_path)
-                return False
-        except Exception as exc:
-            logger.warning("GEE initialisation failed: %s. Falling back to MOCK mode.", exc)
-            return False
+    # Option 2: Search for key file on disk
+    # Supports Render Secret Files (/etc/secrets/...), relative paths, and Windows/Linux slashes
+    candidate_paths: List[Path] = []
 
-    logger.info(
-        "GEE credentials not provided. Running in MOCK mode (synthetic Sentinel tiles for testing)."
-    )
+    if key_path_env:
+        norm_path = key_path_env.replace("\\", "/")
+        p = Path(norm_path)
+        candidate_paths.extend([
+            p,
+            Path(p.name),
+            Path(__file__).resolve().parent.parent / p.name,
+            Path("/etc/secrets") / p.name,
+        ])
+
+    # Check Render secret files default location (/etc/secrets/)
+    render_secrets = Path("/etc/secrets")
+    if render_secrets.exists() and render_secrets.is_dir():
+        for f in render_secrets.glob("*.json"):
+            candidate_paths.append(f)
+
+    # Check backend directory and project root
+    backend_dir = Path(__file__).resolve().parent.parent
+    for pat in ("*satquery*.json", "*gee*.json", "*service_account*.json"):
+        candidate_paths.extend(backend_dir.glob(pat))
+        candidate_paths.extend(backend_dir.parent.glob(pat))
+
+    for path in candidate_paths:
+        if path.exists() and path.is_file():
+            try:
+                import json
+                with open(path, "r", encoding="utf-8") as jf:
+                    data = jf.read()
+                    parsed = json.loads(data)
+
+                if "client_email" in parsed and "private_key" in parsed:
+                    sa_email = service_account or parsed.get("client_email")
+                    proj = project_id or parsed.get("project_id")
+
+                    creds = ee.ServiceAccountCredentials(sa_email, key_file=str(path.resolve()))
+                    ee.Initialize(creds, project=proj or None)
+                    _gee_initialised = True
+                    _gee_init_source = f"file:{path}"
+                    _gee_init_error = None
+                    logger.info("Google Earth Engine initialised via %s (project=%s).", path, proj)
+                    return True
+            except Exception as exc:
+                _gee_init_error = f"Key file '{path}' init failed: {exc}"
+                logger.warning("%s", _gee_init_error)
+
+    if not _gee_init_error:
+        _gee_init_error = "No GEE credentials provided (neither GEE_SERVICE_ACCOUNT_KEY_JSON nor secret key file found)"
+    logger.info("GEE not initialised (%s). Running in MOCK mode.", _gee_init_error)
     return False
 
 

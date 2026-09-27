@@ -126,6 +126,10 @@ _CORS_ORIGINS = [
 async def lifespan(app: FastAPI):
     # ── Startup ────────────────────────────────────────────────────────────
     logger.info("SatQuery AI starting up …")
+    try:
+        gee_service._init_gee()
+    except Exception as e:
+        logger.warning("GEE startup init error: %s", e)
     warm_up_all_models()
     yield
     # ── Shutdown ───────────────────────────────────────────────────────────
@@ -172,9 +176,11 @@ def root():
 
 @app.get("/healthz", tags=["Meta"])
 def health_check():
+    gee_ok = gee_service._init_gee()
     return {
         "status": "ok",
-        "gee": gee_service._gee_initialised,
+        "gee": gee_ok,
+        "gee_details": gee_service.get_gee_status(),
         "version": "1.0.0",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
