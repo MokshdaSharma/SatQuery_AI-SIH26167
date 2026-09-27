@@ -2,20 +2,35 @@ services:
   - type: web
     name: satquery-ai-backend
     runtime: python
+    repo: https://github.com/MokshdaSharma/SatQuery_AI-SIH26167.git
     plan: free
+    region: oregon
+    branch: main
+    rootDir: .
     buildCommand: pip install -r backend/requirements.txt
     startCommand: cd backend && gunicorn main:app -w 1 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT --timeout 120
+    healthCheckPath: /healthz
     envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
       - key: CORS_ORIGINS
         value: "*"
       - key: SESSIONS_DIR
         value: ./sessions
-      - key: PYTHON_VERSION
-        value: "3.11.9"
-      # Optional Secrets to set in Render Dashboard (Environment):
-      # - OPENAI_API_KEY
-      # - MAPBOX_TOKEN
-      # - GEE_SERVICE_ACCOUNT_KEY_JSON
-      # - GEE_SERVICE_ACCOUNT_EMAIL
-      # - GEE_PROJECT_ID
-      # - HF_TOKEN
+      - key: MODELS_WEIGHTS_DIR
+        value: ./models/weights
+      # ── Secrets: set these in the Render Dashboard → Environment ──
+      # - key: MAPBOX_TOKEN
+      #   sync: false
+      # - key: GEE_SERVICE_ACCOUNT_KEY_JSON
+      #   sync: false
+      # - key: GEE_SERVICE_ACCOUNT_EMAIL
+      #   sync: false
+      # - key: GEE_PROJECT_ID
+      #   sync: false
+      # - key: OPENAI_API_KEY
+      #   sync: false
+      # - key: ANTHROPIC_API_KEY
+      #   sync: false
+      # - key: HF_TOKEN
+      #   sync: false
